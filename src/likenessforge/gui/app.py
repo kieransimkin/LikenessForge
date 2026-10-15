@@ -10,7 +10,7 @@ from typing import Any
 from PIL import Image
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -1042,6 +1042,7 @@ class LikenessForgeWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("LikenessForge")
+        self.setWindowIcon(QIcon(str(Path(__file__).resolve().parents[1] / "assets/logo.svg")))
         self.resize(1180, 920)
         self.setAcceptDrops(True)
         self._workers: set[TaskThread] = set()

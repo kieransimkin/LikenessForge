@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">LikenessForge logo</title>
+  <desc id="desc">A face contour and a gold repair region inside corner brackets. Original DanceFlow family mark by Kieran Simkin.</desc>
+  
+  
+  <g fill="none" stroke="#171124" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M43 29H29v14M85 29h14v14M29 85v14h14M99 85v14H85"/>
+    <path d="M64 33c-18 0-27 13-27 29 0 22 13 34 27 34"/>
+    <path d="M64 33c18 0 27 13 27 29 0 22-13 34-27 34" stroke="#171124"/>
+    <path d="M50 59h2M76 59h2M64 60v14h5M54 82q10 7 20 0"/>
+  </g>
+</svg>

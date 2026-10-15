@@ -3,6 +3,7 @@ name: Tests and distribution validation
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -32,7 +33,7 @@ jobs:
           enable-cache: true
 
       - name: Install test and GUI dependencies
-        run: uv sync --extra gui --extra dev
+        run: uv sync --locked --extra gui --extra dev
 
       - name: Install Qt runtime libraries
         run: |
@@ -48,7 +49,7 @@ jobs:
         run: uv run pytest -q
 
       - name: Lint Python
-        run: uv run ruff check src tests
+        run: uv run ruff check src tests scripts
 
       - name: Validate Bash launcher syntax
         run: bash -n start-gui.sh
@@ -104,8 +105,54 @@ jobs:
       - name: Build wheel and source distribution
         run: uv build
 
+      - name: Validate actual distribution metadata and release identity
+        run: |
+          uvx twine check --strict dist/*
+          python scripts/package_release.py
+          python - <<'PY'
+          import json, os
+          data = json.load(open('dist/package-manifest.json'))
+          if os.environ['GITHUB_REF_TYPE'] == 'tag':
+              assert os.environ['GITHUB_REF_NAME'] == 'v' + data['version']
+          PY
+
       - name: Upload distributions
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: likenessforge-dist
           path: dist/
+
+  github-release:
+    name: Publish tested GitHub distributions
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: likenessforge-dist
+          path: dist
+      - name: Verify, publish and download exact packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cd dist && sha256sum -c SHA256SUMS.txt && cd ..
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo 'Refusing to overwrite an immutable release'; exit 1
+          fi
+          cat > release-notes.md <<EOF
+          Local facial-likeness repair and identity LoRA training in the DanceFlow ecosystem.
+
+          Website: https://kieransimkin.co.uk/danceflow/
+
+          This release adds ecosystem/contributor guidance, truthful requirements, family branding, project metadata and validated immutable distribution packaging. Source: $GITHUB_SHA
+
+          Validation: Python 3.10/3.12/3.13 synthetic unit and offscreen Qt tests, Ruff, launcher syntax and built wheel/source metadata/private-file checks. These checks do not establish GPU memory fit or generated likeness quality. Models and trained identity weights are not included. A GitHub release does not establish package-registry publication.
+          EOF
+          gh release create "$GITHUB_REF_NAME" dist/* --title "LikenessForge $GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag
+          mkdir readback
+          gh release download "$GITHUB_REF_NAME" --dir readback
+          cd readback && sha256sum -c SHA256SUMS.txt

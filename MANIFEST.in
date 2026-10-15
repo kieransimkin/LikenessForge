@@ -1,0 +1,9 @@
+include AGENTS.md CONTRIBUTING.md start-gui.ps1 start-gui.bat start-gui.sh .python-version uv.lock
+recursive-include docs *.md *.svg *.png
+recursive-include scripts *.py
+recursive-include examples *.yaml
+recursive-include tests *.py
+global-exclude *.pyc *.safetensors *.ckpt *.pt *.pth .env
+prune models
+prune outputs
+prune likenessforge-debug
