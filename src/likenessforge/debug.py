@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from PIL import Image
-
 
 LOG = logging.getLogger("likenessforge")
 DebugCallback = Callable[[dict[str, Any]], None]

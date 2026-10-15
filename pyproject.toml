@@ -72,7 +72,7 @@ all = [
   "tensorboard>=2.18",
   "bitsandbytes>=0.45; platform_system != 'Darwin'",
 ]
-dev = ["pytest>=8", "ruff>=0.9", "build>=1.2", "twine>=6"]
+dev = ["pytest>=8", "ruff>=0.17,<0.18", "build>=1.2", "twine>=6"]
 
 [project.urls]
 Homepage = "https://kieransimkin.co.uk/"

@@ -15,7 +15,7 @@ class TaskThread(QThread):
     message = Signal(str)
     model_event = Signal(object)
 
-    def __init__(self, function: Callable[["TaskThread"], Any], parent=None):
+    def __init__(self, function: Callable[[TaskThread], Any], parent=None):
         super().__init__(parent)
         self.function = function
 
@@ -25,5 +25,5 @@ class TaskThread(QThread):
     def run(self) -> None:
         try:
             self.result.emit(self.function(self))
-        except Exception:
+        except Exception:  # noqa: BLE001 - thread boundary must surface arbitrary task failures
             self.failed.emit(traceback.format_exc())

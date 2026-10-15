@@ -19,8 +19,8 @@ from likenessforge.image_ops import (
 )
 from likenessforge.types import ModifyRequest, TrainingRequest
 
-
 LOG = logging.getLogger("likenessforge")
+
 
 def _training_sources(source: Path | str | Iterable[Path | str]):
     if isinstance(source, (str, Path)):

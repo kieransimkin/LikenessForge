@@ -4,7 +4,6 @@ import logging
 
 from likenessforge.plugins.base import ImageModifier, PluginInfo
 
-
 LOG = logging.getLogger("likenessforge")
 
 
@@ -36,10 +35,7 @@ class _DiffusersInpaint(ImageModifier):
             LOG.info("loading LoRA: %s", request.lora)
             pipe.load_lora_weights(str(request.lora), adapter_name="identity")
             if hasattr(pipe, "set_adapters"):
-                try:
-                    pipe.set_adapters(["identity"], adapter_weights=[request.lora_scale])
-                except Exception:
-                    pass
+                pipe.set_adapters(["identity"], adapter_weights=[request.lora_scale])
         gen_device = device if device != "cuda" or not hasattr(pipe, "_execution_device") else pipe._execution_device
         generator = torch.Generator(device=str(gen_device)).manual_seed(int(request.seed))
         kwargs = {

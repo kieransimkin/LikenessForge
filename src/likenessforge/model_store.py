@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from huggingface_hub import hf_hub_download, snapshot_download
 from platformdirs import user_cache_dir
-
 
 LOG = logging.getLogger("likenessforge")
 
@@ -106,7 +105,8 @@ class ModelStore:
                 local_files_only=True,
             )
             return True
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - cache probes may fail through multiple HF backends
+            LOG.debug("Hugging Face snapshot not cached for %s: %s", repo_id, exc)
             return False
 
     def ensure_hf_snapshot(

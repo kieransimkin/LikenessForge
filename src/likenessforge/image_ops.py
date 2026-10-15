@@ -35,10 +35,10 @@ def square_crop_box(box: Box, image_size: tuple[int, int], margin: float = 0.55)
     cx, cy = box.center
     side = max(box.width, box.height) * (1.0 + 2.0 * margin)
     side = max(16.0, side)
-    x1 = int(round(cx - side / 2))
-    y1 = int(round(cy - side / 2))
-    x2 = int(round(cx + side / 2))
-    y2 = int(round(cy + side / 2))
+    x1 = round(cx - side / 2)
+    y1 = round(cy - side / 2)
+    x2 = round(cx + side / 2)
+    y2 = round(cy + side / 2)
     if x1 < 0:
         x2 -= x1
         x1 = 0

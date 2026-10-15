@@ -4,7 +4,6 @@ import logging
 
 from likenessforge.plugins.base import ImageModifier, PluginInfo
 
-
 LOG = logging.getLogger("likenessforge")
 
 
@@ -40,7 +39,7 @@ class Flux2KleinModifier(ImageModifier):
                 )
                 quantized = True
                 LOG.info("using bitsandbytes 4-bit quantization for FLUX.2 Klein")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - optional quantization backend failures must fall back
                 LOG.warning("4-bit pipeline quantization unavailable (%s); falling back to CPU offload", exc)
         try:
             pipe = Flux2KleinPipeline.from_pretrained(model_dir, **kwargs)
@@ -68,12 +67,13 @@ class Flux2KleinModifier(ImageModifier):
                     return False
                 total_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
                 return total_gb < 13.0
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - GPU capability probing is best-effort
+                LOG.debug("unable to determine GPU VRAM for auto mode: %s", exc)
                 return False
         return bool(mode)
 
     def modify(self, request):
-        pipe, torch, device = self._load(low_vram=self._wants_low_vram())
+        pipe, torch, _device = self._load(low_vram=self._wants_low_vram())
         if request.lora:
             LOG.info("loading LoRA: %s", request.lora)
             pipe.load_lora_weights(str(request.lora), adapter_name="identity")

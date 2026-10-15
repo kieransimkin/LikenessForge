@@ -4,13 +4,12 @@ import logging
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import requests
 
 from likenessforge.plugins.base import LoraTrainer, PluginInfo
-
 
 LOG = logging.getLogger("likenessforge")
 DIFFUSERS_REF = "v0.41.0"

@@ -39,12 +39,11 @@ from PySide6.QtWidgets import (
 
 from likenessforge.config import ForgeConfig
 from likenessforge.debug import DebugSink
+from likenessforge.gui.workers import TaskThread
 from likenessforge.image_ops import annotate_faces
 from likenessforge.model_store import ModelProgress, ModelStore
 from likenessforge.registry import create, plugin_classes
 from likenessforge.workflow import RepairWorkflow, TrainingWorkflow
-from likenessforge.gui.workers import TaskThread
-
 
 LOG = logging.getLogger("likenessforge")
 IMAGE_FILTER = "Images (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff);;All files (*)"
@@ -81,7 +80,6 @@ def _format_bytes(value: float | None) -> str:
     return f"{size:.1f} TiB"
 
 
-
 def _format_progress(event: ModelProgress) -> str:
     unit = (event.unit or "").lower()
     if unit in {"b", "byte", "bytes"}:
@@ -99,7 +97,7 @@ def _load_training_metadata(lora_path: str | Path) -> dict[str, Any] | None:
         if candidate.exists():
             try:
                 return json.loads(candidate.read_text(encoding="utf-8"))
-            except Exception:
+            except (OSError, UnicodeError, json.JSONDecodeError):
                 return None
     return None
 
@@ -521,8 +519,8 @@ class RepairTab(QWidget):
             self.output.setText(str(source.with_name(f"{source.stem}-repaired{source.suffix or '.png'}")))
             try:
                 self.input_preview.set_pil(Image.open(path).convert("RGB"))
-            except Exception:
-                pass
+            except OSError as exc:
+                LOG.warning("unable to preview selected image %s: %s", path, exc)
 
     def _choose_output(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Output photograph", self.output.text(), IMAGE_FILTER)

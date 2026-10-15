@@ -6,7 +6,6 @@ from likenessforge.image_ops import stable_face_order
 from likenessforge.plugins.base import FaceDetector, PluginInfo
 from likenessforge.types import Box, FaceCandidate
 
-
 MODEL_ID = "opencv/face_detection_yunet"
 MODEL_FILE = "face_detection_yunet_2023mar.onnx"
 
@@ -57,8 +56,8 @@ class OpenCVYuNetDetector(FaceDetector):
             x, y, w, h = [float(v) for v in raw[:4]]
             if w < min_face_size or h < min_face_size:
                 continue
-            x1, y1 = int(round(x)), int(round(y))
-            x2, y2 = int(round(x + w)), int(round(y + h))
+            x1, y1 = round(x), round(y)
+            x2, y2 = round(x + w), round(y + h)
             landmarks = [(float(raw[i]), float(raw[i + 1])) for i in range(4, 14, 2)]
             score = float(raw[14])
             faces.append(

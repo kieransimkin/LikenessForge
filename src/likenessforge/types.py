@@ -31,7 +31,7 @@ class Box:
     def center(self) -> tuple[float, float]:
         return ((self.x1 + self.x2) / 2.0, (self.y1 + self.y2) / 2.0)
 
-    def clamp(self, width: int, height: int) -> "Box":
+    def clamp(self, width: int, height: int) -> Box:
         return Box(
             max(0, min(width, self.x1)),
             max(0, min(height, self.y1)),

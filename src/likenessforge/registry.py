@@ -6,7 +6,6 @@ from typing import Any
 
 from likenessforge.model_store import ModelStore
 
-
 KINDS = {
     "detector": "likenessforge.detectors",
     "segmenter": "likenessforge.segmenters",
@@ -17,10 +16,10 @@ KINDS = {
 
 def _builtins() -> dict[str, dict[str, type]]:
     from likenessforge.plugins.detectors.mtcnn import MTCNNDetector
-    from likenessforge.plugins.detectors.yunet import OpenCVYuNetDetector
     from likenessforge.plugins.detectors.opencv_haar import OpenCVHaarDetector
+    from likenessforge.plugins.detectors.yunet import OpenCVYuNetDetector
     from likenessforge.plugins.modifiers.diffusers_inpaint import SD15InpaintModifier, SDXLInpaintModifier
-    from likenessforge.plugins.modifiers.flux2_klein import Flux2KleinModifier, Flux2KleinLowVRAMModifier
+    from likenessforge.plugins.modifiers.flux2_klein import Flux2KleinLowVRAMModifier, Flux2KleinModifier
     from likenessforge.plugins.segmenters.sam2 import SAM2TinySegmenter
     from likenessforge.plugins.segmenters.soft_face import SoftFaceSegmenter
     from likenessforge.plugins.trainers.diffusers_scripts import (
