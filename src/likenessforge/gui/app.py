@@ -47,6 +47,8 @@ from likenessforge.workflow import RepairWorkflow, TrainingWorkflow
 
 LOG = logging.getLogger("likenessforge")
 IMAGE_FILTER = "Images (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff);;All files (*)"
+IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"})
+LORA_EXTENSIONS = frozenset({".safetensors", ".ckpt", ".pt", ".pth"})
 
 
 def _plugin_name(combo: QComboBox) -> str:
@@ -106,6 +108,107 @@ def _remove_selected_items(widget: QListWidget) -> None:
     rows = sorted({index.row() for index in widget.selectedIndexes()}, reverse=True)
     for row in rows:
         widget.takeItem(row)
+
+
+def _local_files(paths, extensions: frozenset[str] | None = None) -> list[Path]:
+    """Return existing, unique local files accepted by a drop target."""
+    accepted: list[Path] = []
+    seen: set[Path] = set()
+    for raw in paths:
+        path = Path(raw).expanduser()
+        if not path.is_file():
+            continue
+        resolved = path.resolve()
+        if extensions is not None and resolved.suffix.lower() not in extensions:
+            continue
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        accepted.append(resolved)
+    return accepted
+
+
+def _mime_local_files(mime, extensions: frozenset[str] | None = None) -> list[Path]:
+    if not mime.hasUrls():
+        return []
+    return _local_files(
+        [url.toLocalFile() for url in mime.urls() if url.isLocalFile()],
+        extensions,
+    )
+
+
+class DropFileLineEdit(QLineEdit):
+    """Single-file field supporting both typing/browse and OS drag-and-drop."""
+
+    path_dropped = Signal(str)
+
+    def __init__(
+        self,
+        extensions: frozenset[str] | None = None,
+        placeholder: str = "Drop a file here or click Browse…",
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.extensions = extensions
+        self.setAcceptDrops(True)
+        self.setPlaceholderText(placeholder)
+
+    def dragEnterEvent(self, event):
+        if _mime_local_files(event.mimeData(), self.extensions):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if _mime_local_files(event.mimeData(), self.extensions):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        paths = _mime_local_files(event.mimeData(), self.extensions)
+        if not paths:
+            event.ignore()
+            return
+        self.path_dropped.emit(str(paths[0]))
+        event.acceptProposedAction()
+
+
+class DropFileListWidget(QListWidget):
+    """Multi-file list accepting local files dragged from the desktop/file manager."""
+
+    paths_dropped = Signal(object)
+
+    def __init__(
+        self,
+        extensions: frozenset[str] | None = None,
+        tooltip: str = "Drop files here or click Add…",
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.extensions = extensions
+        self.setAcceptDrops(True)
+        self.setToolTip(tooltip)
+
+    def dragEnterEvent(self, event):
+        if _mime_local_files(event.mimeData(), self.extensions):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if _mime_local_files(event.mimeData(), self.extensions):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        paths = _mime_local_files(event.mimeData(), self.extensions)
+        if not paths:
+            event.ignore()
+            return
+        self.paths_dropped.emit(paths)
+        event.acceptProposedAction()
 
 
 class ImagePreview(QLabel):
@@ -292,7 +395,8 @@ class TrainingTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.images = QListWidget()
+        self.images = DropFileListWidget(IMAGE_EXTENSIONS)
+        self.images.paths_dropped.connect(self.add_image_paths)
         add = QPushButton("Add likeness references…")
         remove = QPushButton("Remove selected")
         clear = QPushButton("Clear")
@@ -356,7 +460,7 @@ class TrainingTab(QWidget):
         self.log.setMaximumBlockCount(2000)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Likeness reference images"))
+        layout.addWidget(QLabel("Likeness reference images — drag files here or use Add…"))
         layout.addWidget(self.images, 1)
         layout.addLayout(image_buttons)
         layout.addLayout(form)
@@ -367,11 +471,22 @@ class TrainingTab(QWidget):
 
     def _add_images(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(self, "Select likeness reference images", "", IMAGE_FILTER)
-        existing = {self.images.item(i).text() for i in range(self.images.count())}
-        for path in files:
+        self.add_image_paths(files)
+
+    def add_image_paths(self, paths) -> None:
+        existing = {Path(self.images.item(i).text()).resolve() for i in range(self.images.count())}
+        for path in _local_files(paths, IMAGE_EXTENSIONS):
             if path not in existing:
-                self.images.addItem(path)
+                self.images.addItem(str(path))
                 existing.add(path)
+
+    def handle_dropped_files(self, paths) -> bool:
+        images = _local_files(paths, IMAGE_EXTENSIONS)
+        if not images:
+            return False
+        self.add_image_paths(images)
+        self.status.setText(f"Added {len(images)} training reference image(s) by drag-and-drop.")
+        return True
 
     def _choose_output(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Training output directory")
@@ -388,7 +503,8 @@ class TrainingWizardTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.images = QListWidget()
+        self.images = DropFileListWidget(IMAGE_EXTENSIONS)
+        self.images.paths_dropped.connect(self.add_image_paths)
         add = QPushButton("Add training references…")
         remove = QPushButton("Remove selected")
         clear = QPushButton("Clear")
@@ -401,7 +517,8 @@ class TrainingWizardTab(QWidget):
         image_buttons.addWidget(clear)
         image_buttons.addStretch(1)
 
-        self.validation = QLineEdit()
+        self.validation = DropFileLineEdit(IMAGE_EXTENSIONS, "Drop validation image here or click Browse…")
+        self.validation.path_dropped.connect(self.set_validation_path)
         validation_browse = QPushButton("Browse…")
         validation_browse.clicked.connect(self._choose_validation)
         validation_row = QHBoxLayout()
@@ -476,7 +593,7 @@ class TrainingWizardTab(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addWidget(explainer)
-        layout.addWidget(QLabel("Training likeness reference images"))
+        layout.addWidget(QLabel("Training likeness reference images — drag files here or use Add…"))
         layout.addWidget(self.images, 1)
         layout.addLayout(image_buttons)
         layout.addLayout(form)
@@ -489,23 +606,47 @@ class TrainingWizardTab(QWidget):
 
     def _add_images(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(self, "Select training reference images", "", IMAGE_FILTER)
-        existing = {self.images.item(i).text() for i in range(self.images.count())}
-        for path in files:
+        self.add_image_paths(files)
+
+    def add_image_paths(self, paths) -> None:
+        existing = {Path(self.images.item(i).text()).resolve() for i in range(self.images.count())}
+        for path in _local_files(paths, IMAGE_EXTENSIONS):
             if path not in existing:
-                self.images.addItem(path)
+                self.images.addItem(str(path))
                 existing.add(path)
 
     def _choose_validation(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Validation photograph", "", IMAGE_FILTER)
         if path:
-            self.validation.setText(path)
-            source = Path(path)
-            if not self.output.text().strip():
-                self.output.setText(str(source.with_name(f"{source.stem}-training-wizard")))
-            try:
-                self.validation_preview.set_pil(Image.open(path).convert("RGB"))
-            except OSError as exc:
-                LOG.warning("unable to preview training-wizard validation image %s: %s", path, exc)
+            self.set_validation_path(path)
+
+    def set_validation_path(self, path: str | Path) -> None:
+        files = _local_files([path], IMAGE_EXTENSIONS)
+        if not files:
+            return
+        source = files[0]
+        self.validation.setText(str(source))
+        if not self.output.text().strip():
+            self.output.setText(str(source.with_name(f"{source.stem}-training-wizard")))
+        try:
+            self.validation_preview.set_pil(Image.open(source).convert("RGB"))
+        except OSError as exc:
+            LOG.warning("unable to preview training-wizard validation image %s: %s", source, exc)
+
+    def handle_dropped_files(self, paths) -> bool:
+        images = _local_files(paths, IMAGE_EXTENSIONS)
+        if not images:
+            return False
+        # A single image dropped on the general tab is most likely the one-off
+        # validation photograph; batches are training references. Dedicated drop
+        # targets remain unambiguous for either role.
+        if len(images) == 1 and not self.validation.text().strip():
+            self.set_validation_path(images[0])
+            self.status.setText("Validation photograph selected by drag-and-drop.")
+        else:
+            self.add_image_paths(images)
+            self.status.setText(f"Added {len(images)} training reference image(s) by drag-and-drop.")
+        return True
 
     def _choose_output(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Training wizard results directory")
@@ -522,7 +663,8 @@ class RepairTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.source = QLineEdit()
+        self.source = DropFileLineEdit(IMAGE_EXTENSIONS, "Drop original image here or click Browse…")
+        self.source.path_dropped.connect(self.set_source_path)
         source_browse = QPushButton("Browse…")
         source_browse.clicked.connect(self._choose_source)
         source_row = QHBoxLayout()
@@ -540,7 +682,8 @@ class RepairTab(QWidget):
         output_widget = QWidget()
         output_widget.setLayout(output_row)
 
-        self.lora = QLineEdit()
+        self.lora = DropFileLineEdit(LORA_EXTENSIONS, "Drop LoRA weights here or click Browse…")
+        self.lora.path_dropped.connect(self.set_lora_path)
         lora_browse = QPushButton("Browse…")
         lora_browse.clicked.connect(self._choose_lora)
         lora_row = QHBoxLayout()
@@ -549,7 +692,8 @@ class RepairTab(QWidget):
         lora_widget = QWidget()
         lora_widget.setLayout(lora_row)
 
-        self.references = QListWidget()
+        self.references = DropFileListWidget(IMAGE_EXTENSIONS)
+        self.references.paths_dropped.connect(self.add_reference_paths)
         self.references.setMaximumHeight(90)
         refs_add = QPushButton("Add identity reference…")
         refs_remove = QPushButton("Remove")
@@ -635,7 +779,7 @@ class RepairTab(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
-        layout.addWidget(QLabel("Optional identity reference images (used by supporting modifier backends)"))
+        layout.addWidget(QLabel("Optional identity reference images — drag files here or use Add…"))
         layout.addWidget(self.references)
         layout.addLayout(refs_row)
         layout.addLayout(face_row)
@@ -648,13 +792,19 @@ class RepairTab(QWidget):
     def _choose_source(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Original photograph", "", IMAGE_FILTER)
         if path:
-            self.source.setText(path)
-            source = Path(path)
-            self.output.setText(str(source.with_name(f"{source.stem}-repaired{source.suffix or '.png'}")))
-            try:
-                self.input_preview.set_pil(Image.open(path).convert("RGB"))
-            except OSError as exc:
-                LOG.warning("unable to preview selected image %s: %s", path, exc)
+            self.set_source_path(path)
+
+    def set_source_path(self, path: str | Path) -> None:
+        files = _local_files([path], IMAGE_EXTENSIONS)
+        if not files:
+            return
+        source = files[0]
+        self.source.setText(str(source))
+        self.output.setText(str(source.with_name(f"{source.stem}-repaired{source.suffix or '.png'}")))
+        try:
+            self.input_preview.set_pil(Image.open(source).convert("RGB"))
+        except OSError as exc:
+            LOG.warning("unable to preview selected image %s: %s", source, exc)
 
     def _choose_output(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Output photograph", self.output.text(), IMAGE_FILTER)
@@ -662,17 +812,48 @@ class RepairTab(QWidget):
             self.output.setText(path)
 
     def _choose_lora(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Identity LoRA", "", "LoRA weights (*.safetensors);;All files (*)")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Identity LoRA",
+            "",
+            "LoRA weights (*.safetensors *.ckpt *.pt *.pth);;All files (*)",
+        )
         if path:
-            self.lora.setText(path)
+            self.set_lora_path(path)
+
+    def set_lora_path(self, path: str | Path) -> None:
+        files = _local_files([path], LORA_EXTENSIONS)
+        if files:
+            self.lora.setText(str(files[0]))
 
     def _add_references(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(self, "Identity reference images", "", IMAGE_FILTER)
-        existing = {self.references.item(i).text() for i in range(self.references.count())}
-        for path in files:
+        self.add_reference_paths(files)
+
+    def add_reference_paths(self, paths) -> None:
+        existing = {Path(self.references.item(i).text()).resolve() for i in range(self.references.count())}
+        for path in _local_files(paths, IMAGE_EXTENSIONS):
             if path not in existing:
-                self.references.addItem(path)
+                self.references.addItem(str(path))
                 existing.add(path)
+
+    def handle_dropped_files(self, paths) -> bool:
+        handled = False
+        loras = _local_files(paths, LORA_EXTENSIONS)
+        if loras:
+            self.set_lora_path(loras[0])
+            handled = True
+        images = _local_files(paths, IMAGE_EXTENSIONS)
+        if images:
+            if not self.source.text().strip():
+                self.set_source_path(images[0])
+                images = images[1:]
+            if images:
+                self.add_reference_paths(images)
+            handled = True
+        if handled:
+            self.status.setText("Files added by drag-and-drop. Review the selected source/LoRA/references.")
+        return handled
 
     def reference_paths(self) -> list[Path]:
         return [Path(self.references.item(i).text()) for i in range(self.references.count())]
@@ -684,7 +865,8 @@ class RepairWizardTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.source = QLineEdit()
+        self.source = DropFileLineEdit(IMAGE_EXTENSIONS, "Drop original image here or click Browse…")
+        self.source.path_dropped.connect(self.set_source_path)
         source_browse = QPushButton("Browse…")
         source_browse.clicked.connect(self._choose_source)
         source_row = QHBoxLayout()
@@ -702,7 +884,8 @@ class RepairWizardTab(QWidget):
         output_widget = QWidget()
         output_widget.setLayout(output_row)
 
-        self.lora = QLineEdit()
+        self.lora = DropFileLineEdit(LORA_EXTENSIONS, "Drop LoRA weights here or click Browse…")
+        self.lora.path_dropped.connect(self.set_lora_path)
         lora_browse = QPushButton("Browse…")
         lora_browse.clicked.connect(self._choose_lora)
         lora_row = QHBoxLayout()
@@ -711,7 +894,8 @@ class RepairWizardTab(QWidget):
         lora_widget = QWidget()
         lora_widget.setLayout(lora_row)
 
-        self.references = QListWidget()
+        self.references = DropFileListWidget(IMAGE_EXTENSIONS)
+        self.references.paths_dropped.connect(self.add_reference_paths)
         self.references.setMaximumHeight(90)
         refs_add = QPushButton("Add identity reference…")
         refs_remove = QPushButton("Remove")
@@ -774,7 +958,7 @@ class RepairWizardTab(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(explainer)
         layout.addLayout(form)
-        layout.addWidget(QLabel("Optional identity reference images (for modifier backends that support them)"))
+        layout.addWidget(QLabel("Optional identity reference images — drag files here or use Add…"))
         layout.addWidget(self.references)
         layout.addLayout(refs_row)
         layout.addLayout(face_row)
@@ -787,13 +971,19 @@ class RepairWizardTab(QWidget):
     def _choose_source(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Original photograph", "", IMAGE_FILTER)
         if path:
-            self.source.setText(path)
-            source = Path(path)
-            self.output.setText(str(source.with_name(f"{source.stem}-wizard")))
-            try:
-                self.input_preview.set_pil(Image.open(path).convert("RGB"))
-            except OSError as exc:
-                LOG.warning("unable to preview selected wizard image %s: %s", path, exc)
+            self.set_source_path(path)
+
+    def set_source_path(self, path: str | Path) -> None:
+        files = _local_files([path], IMAGE_EXTENSIONS)
+        if not files:
+            return
+        source = files[0]
+        self.source.setText(str(source))
+        self.output.setText(str(source.with_name(f"{source.stem}-wizard")))
+        try:
+            self.input_preview.set_pil(Image.open(source).convert("RGB"))
+        except OSError as exc:
+            LOG.warning("unable to preview selected wizard image %s: %s", source, exc)
 
     def _choose_output(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Wizard results directory")
@@ -801,17 +991,48 @@ class RepairWizardTab(QWidget):
             self.output.setText(path)
 
     def _choose_lora(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Identity LoRA", "", "LoRA weights (*.safetensors);;All files (*)")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Identity LoRA",
+            "",
+            "LoRA weights (*.safetensors *.ckpt *.pt *.pth);;All files (*)",
+        )
         if path:
-            self.lora.setText(path)
+            self.set_lora_path(path)
+
+    def set_lora_path(self, path: str | Path) -> None:
+        files = _local_files([path], LORA_EXTENSIONS)
+        if files:
+            self.lora.setText(str(files[0]))
 
     def _add_references(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(self, "Identity reference images", "", IMAGE_FILTER)
-        existing = {self.references.item(i).text() for i in range(self.references.count())}
-        for path in files:
+        self.add_reference_paths(files)
+
+    def add_reference_paths(self, paths) -> None:
+        existing = {Path(self.references.item(i).text()).resolve() for i in range(self.references.count())}
+        for path in _local_files(paths, IMAGE_EXTENSIONS):
             if path not in existing:
-                self.references.addItem(path)
+                self.references.addItem(str(path))
                 existing.add(path)
+
+    def handle_dropped_files(self, paths) -> bool:
+        handled = False
+        loras = _local_files(paths, LORA_EXTENSIONS)
+        if loras:
+            self.set_lora_path(loras[0])
+            handled = True
+        images = _local_files(paths, IMAGE_EXTENSIONS)
+        if images:
+            if not self.source.text().strip():
+                self.set_source_path(images[0])
+                images = images[1:]
+            if images:
+                self.add_reference_paths(images)
+            handled = True
+        if handled:
+            self.status.setText("Files added by drag-and-drop. Review the selected source/LoRA/references.")
+        return handled
 
     def reference_paths(self) -> list[Path]:
         return [Path(self.references.item(i).text()) for i in range(self.references.count())]
@@ -822,6 +1043,7 @@ class LikenessForgeWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("LikenessForge")
         self.resize(1180, 920)
+        self.setAcceptDrops(True)
         self._workers: set[TaskThread] = set()
 
         root = QWidget()
@@ -848,6 +1070,27 @@ class LikenessForgeWindow(QMainWindow):
         self.repair.repair_requested.connect(self.start_repair)
         self.wizard.analyze_requested.connect(self.analyze_wizard_faces)
         self.wizard.start_requested.connect(self.start_wizard)
+
+    def dragEnterEvent(self, event):
+        if _mime_local_files(event.mimeData(), IMAGE_EXTENSIONS | LORA_EXTENSIONS):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if _mime_local_files(event.mimeData(), IMAGE_EXTENSIONS | LORA_EXTENSIONS):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        paths = _mime_local_files(event.mimeData(), IMAGE_EXTENSIONS | LORA_EXTENSIONS)
+        current = self.tabs.currentWidget()
+        handler = getattr(current, "handle_dropped_files", None)
+        if paths and handler and handler(paths):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
     def _start_worker(self, function, on_result=None, on_error=None, message_target=None) -> TaskThread:
         worker = TaskThread(function, self)
