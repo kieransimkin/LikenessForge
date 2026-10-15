@@ -1,0 +1,22 @@
+plugins:
+  detector:
+    name: mtcnn
+    options:
+      min_face_size: 32
+  segmenter:
+    name: sam2-tiny
+  modifier:
+    name: flux2-klein-4b-lowvram
+    options:
+      steps: 4
+      guidance: 4.0
+  trainer:
+    name: sdxl-lora
+
+low_vram: auto
+crop_margin: 0.55
+feather: 32
+prompt: >-
+  repair only the face so it matches the trained identity; preserve expression,
+  pose, age, lighting, skin texture, hair, camera perspective and surrounding image
+negative_prompt: "different person, distorted face, asymmetry, extra eyes, waxy skin"

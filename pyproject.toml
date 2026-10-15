@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "likenessforge"
+version = "0.1.0"
+description = "Modular identity-preserving image repair and LoRA training for the DanceFlow ecosystem."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Kieran Simkin"}]
+dependencies = [
+  "numpy>=1.24,<3",
+  "Pillow>=10.4",
+  "platformdirs>=4.2",
+  "huggingface-hub>=0.30",
+  "PyYAML>=6.0",
+  "requests>=2.32",
+]
+
+[project.optional-dependencies]
+faces = [
+  "opencv-python-headless>=4.10",
+  "facenet-pytorch>=2.6",
+  "torch>=2.5",
+  "torchvision>=0.20",
+]
+sam = [
+  "torch>=2.5",
+  "transformers>=5.0",
+  "accelerate>=1.6",
+]
+diffusion = [
+  "torch>=2.5",
+  "torchvision>=0.20",
+  "diffusers>=0.41.0",
+  "transformers>=5.0",
+  "accelerate>=1.6",
+  "peft>=0.14",
+  "safetensors>=0.5",
+]
+lowvram = [
+  "bitsandbytes>=0.45; platform_system != 'Darwin'",
+  "torchao>=0.10; platform_system != 'Darwin'",
+]
+training = [
+  "torch>=2.5",
+  "torchvision>=0.20",
+  "diffusers>=0.41.0",
+  "transformers>=5.0",
+  "accelerate>=1.6",
+  "peft>=0.14",
+  "datasets>=3.0",
+  "safetensors>=0.5",
+  "ftfy>=6.2",
+  "tensorboard>=2.18",
+]
+all = [
+  "opencv-python-headless>=4.10",
+  "facenet-pytorch>=2.6",
+  "torch>=2.5",
+  "torchvision>=0.20",
+  "diffusers>=0.41.0",
+  "transformers>=5.0",
+  "accelerate>=1.6",
+  "peft>=0.14",
+  "datasets>=3.0",
+  "safetensors>=0.5",
+  "ftfy>=6.2",
+  "tensorboard>=2.18",
+]
+dev = ["pytest>=8", "ruff>=0.9", "build>=1.2", "twine>=6"]
+
+[project.urls]
+Homepage = "https://kieransimkin.co.uk/"
+"DanceFlow ecosystem" = "https://kieransimkin.co.uk/danceflow/"
+Repository = "https://github.com/kieransimkin/LikenessForge"
+Issues = "https://github.com/kieransimkin/LikenessForge/issues"
+
+[project.scripts]
+likenessforge = "likenessforge.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+likenessforge = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
