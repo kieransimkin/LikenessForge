@@ -113,6 +113,31 @@ def build_parser():
     train.add_argument("--low-vram", action="store_true")
     train.add_argument("--extra-arg", action="append", default=[], help="Pass an extra argument to the trainer; repeatable")
 
+    train_wizard = sub.add_parser(
+        "train-wizard",
+        help="Train several LoRA variants and compare them on a validation photograph",
+    )
+    _add_common(train_wizard)
+    train_wizard.add_argument("images", help="Directory of authorised training images")
+    train_wizard.add_argument("validation", help="Holdout photograph used to compare the trained LoRAs")
+    train_wizard.add_argument("output", help="Directory for candidate trainings and comparison sheets")
+    train_wizard.add_argument("--detector")
+    train_wizard.add_argument("--segmenter")
+    train_wizard.add_argument("--trainer")
+    train_wizard.add_argument("--modifier")
+    train_wizard.add_argument("--trigger", required=True, help="Unique subject token, e.g. lf_kieran")
+    train_wizard.add_argument("--face", default="largest", help="Training face index or 'largest'")
+    train_wizard.add_argument(
+        "--validation-face",
+        default="largest",
+        help="Validation face index or 'largest'",
+    )
+    train_wizard.add_argument("--preset", choices=["quick", "balanced", "thorough"], default="balanced")
+    train_wizard.add_argument("--seed", type=int, default=0, help="Fixed validation-repair seed")
+    train_wizard.add_argument("--low-vram", action="store_true", help="Use trainer low-VRAM/offload options")
+    train_wizard.add_argument("--prompt")
+    train_wizard.add_argument("--negative-prompt")
+
     prep = sub.add_parser("prepare-training", help="Only prepare segmented/cropped LoRA training images")
     _add_common(prep)
     prep.add_argument("images")
@@ -169,7 +194,8 @@ def main(argv=None):
 
     detector = (
         _plugin(args, cfg, store, "detector")
-        if args.command in {"faces", "repair", "repair-wizard", "train-lora", "prepare-training"}
+        if args.command
+        in {"faces", "repair", "repair-wizard", "train-lora", "train-wizard", "prepare-training"}
         else None
     )
 
@@ -233,6 +259,43 @@ def main(argv=None):
             preset=args.preset,
             seed=args.seed,
             reference_images=refs,
+            progress=progress,
+        )
+        print(run.comparison_face_path)
+        print(run.comparison_full_path)
+        print(run.manifest_path)
+        return 0
+
+    if args.command == "train-wizard":
+        segmenter = _plugin(args, cfg, store, "segmenter")
+        trainer = _plugin(args, cfg, store, "trainer")
+        modifier = _plugin(args, cfg, store, "modifier")
+        if trainer.info.lora_family != modifier.info.lora_family:
+            parser.error(
+                f"trainer {trainer.info.name} produces {trainer.info.lora_family}, but modifier "
+                f"{modifier.info.name} expects {modifier.info.lora_family}"
+            )
+        validation = Image.open(args.validation).convert("RGB")
+        output_dir = Path(args.output)
+        training_workflow = TrainingWorkflow(detector, segmenter, trainer, debug)
+        repair_workflow = RepairWorkflow(detector, segmenter, modifier, debug)
+
+        def progress(index, total, label):
+            print(f"[{index}/{total}] {label}")
+
+        run = training_workflow.wizard(
+            source_dir=Path(args.images),
+            validation_image=validation,
+            repair_workflow=repair_workflow,
+            output_dir=output_dir,
+            trigger=args.trigger,
+            selector=args.face,
+            validation_face_selector=args.validation_face,
+            preset=args.preset,
+            seed=args.seed,
+            low_vram=args.low_vram,
+            prompt=args.prompt or cfg.prompt,
+            negative_prompt=args.negative_prompt or cfg.negative_prompt,
             progress=progress,
         )
         print(run.comparison_face_path)

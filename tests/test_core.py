@@ -7,7 +7,12 @@ from likenessforge.config import load_config
 from likenessforge.debug import DebugSink
 from likenessforge.image_ops import composite_crop, select_face, stable_face_order
 from likenessforge.types import Box, FaceCandidate
-from likenessforge.workflow import RepairWorkflow, TrainingWorkflow, wizard_variants
+from likenessforge.workflow import (
+    RepairWorkflow,
+    TrainingWorkflow,
+    training_wizard_variants,
+    wizard_variants,
+)
 
 
 class DummyInfo:
@@ -38,7 +43,7 @@ class DummySegmenter:
 
 
 class DummyModifier:
-    info = DummyInfo("dummy-modifier", "dummy/model", 64)
+    info = DummyInfo("dummy-modifier", "dummy/model", 64, "dummy")
 
     @property
     def preferred_size(self):
@@ -167,3 +172,49 @@ def test_repair_wizard_saves_candidates_comparisons_and_manifest(tmp_path: Path)
     assert '"crop_margin"' in manifest
     assert '"merge_opacity"' in manifest
     assert '"effective_seed"' in manifest
+
+
+def test_training_wizard_presets_vary_training_hyperparameters():
+    variants = training_wizard_variants("sdxl-lora", "balanced")
+    assert len(variants) == 5
+    assert len({variant.rank for variant in variants}) >= 3
+    assert len({variant.steps for variant in variants}) >= 2
+    assert len({variant.learning_rate for variant in variants}) >= 2
+
+    flux = training_wizard_variants("flux2-klein-lora", "quick")
+    assert len(flux) == 3
+    assert flux[0].steps == 1000
+
+
+def test_training_wizard_trains_and_validates_each_candidate(tmp_path: Path):
+    refs = []
+    for index in range(2):
+        path = tmp_path / f"wizard-reference-{index}.png"
+        Image.new("RGB", (128, 96), (40 + index, 50, 60)).save(path)
+        refs.append(path)
+
+    detector = DummyDetector()
+    segmenter = DummySegmenter()
+    training = TrainingWorkflow(detector, segmenter, DummyTrainer(), DebugSink(False))
+    repair = RepairWorkflow(detector, segmenter, DummyModifier(), DebugSink(False))
+    run = training.wizard(
+        source_dir=refs,
+        validation_image=Image.new("RGB", (128, 96), (20, 40, 60)),
+        repair_workflow=repair,
+        output_dir=tmp_path / "training-wizard",
+        trigger="lf_subject",
+        preset="quick",
+        seed=42,
+        prompt="repair",
+    )
+
+    assert len(run.candidates) == 3
+    assert all(candidate.weights_path.exists() for candidate in run.candidates)
+    assert all(candidate.validation_path.exists() for candidate in run.candidates)
+    assert run.comparison_face_path.exists()
+    assert run.comparison_full_path.exists()
+    assert run.manifest_path.exists()
+    manifest = run.manifest_path.read_text(encoding="utf-8")
+    assert '"learning_rate"' in manifest
+    assert '"validation_repair_settings"' in manifest
+    assert '"validation_repair"' in manifest

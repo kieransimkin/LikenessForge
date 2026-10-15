@@ -66,6 +66,43 @@ class WizardRun:
     comparison_full: Image.Image
 
 
+@dataclass(frozen=True)
+class TrainingWizardVariant:
+    name: str
+    steps: int
+    rank: int
+    learning_rate: float
+    background: str = "blur"
+    crop_margin: float = 0.14
+
+    def label(self) -> str:
+        return (
+            f"{self.name}: steps={self.steps}, rank={self.rank}, lr={self.learning_rate:g}, "
+            f"background={self.background}, crop={self.crop_margin:.2f}"
+        )
+
+
+@dataclass
+class TrainingWizardCandidate:
+    index: int
+    variant: TrainingWizardVariant
+    output_dir: Path
+    weights_path: Path
+    validation_path: Path
+    validation_image: Image.Image
+
+
+@dataclass
+class TrainingWizardRun:
+    output_dir: Path
+    candidates: list[TrainingWizardCandidate]
+    comparison_face_path: Path
+    comparison_full_path: Path
+    manifest_path: Path
+    comparison_face: Image.Image
+    comparison_full: Image.Image
+
+
 def wizard_variants(modifier_name: str, preset: str = "balanced") -> list[WizardVariant]:
     """Return a bounded set of useful repair experiments for a modifier family."""
     preset = preset.lower()
@@ -121,6 +158,30 @@ def wizard_variants(modifier_name: str, preset: str = "balanced") -> list[Wizard
         ]
 
     counts = {"quick": 4, "balanced": 6, "thorough": 10}
+    return variants[: counts[preset]]
+
+
+def training_wizard_variants(trainer_name: str, preset: str = "balanced") -> list[TrainingWizardVariant]:
+    """Return a bounded training sweep that changes one major factor at a time where possible."""
+    preset = preset.lower()
+    if preset not in {"quick", "balanced", "thorough"}:
+        raise ValueError("training wizard preset must be quick, balanced or thorough")
+
+    is_flux = trainer_name.startswith("flux2-")
+    baseline_steps = 1000 if is_flux else 800
+    long_steps = 1400 if is_flux else 1200
+    short_steps = 750 if is_flux else 600
+    variants = [
+        TrainingWizardVariant("baseline", baseline_steps, 16, 1e-4, "blur", 0.14),
+        TrainingWizardVariant("low-rank", baseline_steps, 8, 1e-4, "blur", 0.14),
+        TrainingWizardVariant("longer-training", long_steps, 16, 1e-4, "blur", 0.14),
+        TrainingWizardVariant("high-rank", baseline_steps, 32, 1e-4, "blur", 0.14),
+        TrainingWizardVariant("long-low-lr", long_steps, 16, 5e-5, "blur", 0.14),
+        TrainingWizardVariant("tight-identity", baseline_steps, 16, 1e-4, "neutral", 0.08),
+        TrainingWizardVariant("wide-context", baseline_steps, 16, 1e-4, "original", 0.24),
+        TrainingWizardVariant("short-high-lr", short_steps, 16, 1.5e-4, "blur", 0.14),
+    ]
+    counts = {"quick": 3, "balanced": 5, "thorough": 8}
     return variants[: counts[preset]]
 
 
@@ -391,6 +452,7 @@ class TrainingWorkflow:
         trigger: str,
         selector: str | int = "largest",
         background: str = "blur",
+        crop_margin: float = 0.14,
     ) -> int:
         prepared_dir.mkdir(parents=True, exist_ok=True)
         count = 0
@@ -403,7 +465,7 @@ class TrainingWorkflow:
             face = select_face(faces, selector)
             mask = self.segmenter.segment(image, face).convert("L")
             size = self.trainer.preferred_size
-            crop, crop_mask = tighten_to_mask(image, mask, size, margin=0.14)
+            crop, crop_mask = tighten_to_mask(image, mask, size, margin=crop_margin)
             train_image = masked_training_image(crop, crop_mask, background=background)
             stem = f"{count:04d}-{source.stem}"
             train_image.save(prepared_dir / f"{stem}.png")
@@ -417,6 +479,8 @@ class TrainingWorkflow:
                 face_index=face.index,
                 trainer=self.trainer.info.name,
                 resolution=size,
+                crop_margin=crop_margin,
+                background=background,
             )
             count += 1
         if count == 0:
@@ -435,9 +499,10 @@ class TrainingWorkflow:
         lr: float = 1e-4,
         low_vram: bool = False,
         extra_args: list[str] | None = None,
+        crop_margin: float = 0.14,
     ) -> Path:
         prepared = output_dir / "prepared-dataset"
-        count = self.prepare_dataset(source_dir, prepared, trigger, selector, background)
+        count = self.prepare_dataset(source_dir, prepared, trigger, selector, background, crop_margin)
         self.debug.step("training_dataset_ready", count=count, path=str(prepared))
         req = TrainingRequest(
             dataset_dir=prepared,
@@ -472,8 +537,172 @@ class TrainingWorkflow:
             "rank": rank,
             "learning_rate": lr,
             "low_vram": low_vram,
+            "background": background,
+            "crop_margin": crop_margin,
         }
         metadata_path = output_dir / "likenessforge-training.json"
         metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
         self.debug.step("training_complete", weights=str(weights), metadata=str(metadata_path))
         return weights
+
+    def wizard(
+        self,
+        source_dir: Path | str | Iterable[Path | str],
+        validation_image: Image.Image,
+        repair_workflow: RepairWorkflow,
+        output_dir: Path,
+        trigger: str,
+        *,
+        selector: str | int = "largest",
+        validation_face_selector: str | int = "largest",
+        preset: str = "balanced",
+        seed: int = 0,
+        low_vram: bool = False,
+        prompt: str,
+        negative_prompt: str | None = None,
+        progress: WizardProgress | None = None,
+    ) -> TrainingWizardRun:
+        """Train several LoRAs, validate each identically, and emit visual comparison sheets."""
+        output_dir.mkdir(parents=True, exist_ok=True)
+        if self.trainer.info.lora_family != repair_workflow.modifier.info.lora_family:
+            raise ValueError(
+                f"trainer family {self.trainer.info.lora_family!r} does not match validation modifier family "
+                f"{repair_workflow.modifier.info.lora_family!r}"
+            )
+        sources = list(_training_sources(source_dir))
+        if not sources:
+            raise RuntimeError("No training reference images were supplied")
+        variants = training_wizard_variants(self.trainer.info.name, preset)
+        validation_image, validation_face, validation_mask = repair_workflow._prepare_subject(
+            validation_image, validation_face_selector
+        )
+        repair_variant = next(
+            variant
+            for variant in wizard_variants(repair_workflow.modifier.info.name, "quick")
+            if variant.name == "balanced"
+        )
+
+        candidates: list[TrainingWizardCandidate] = []
+        validation_results: list[Image.Image] = []
+        labels: list[str] = []
+
+        for index, variant in enumerate(variants, start=1):
+            if progress:
+                progress(index, len(variants), f"Training {variant.label()}")
+            candidate_dir = output_dir / f"candidate-{index:02d}-{variant.name}"
+            weights = self.train(
+                sources,
+                candidate_dir,
+                trigger,
+                selector=selector,
+                background=variant.background,
+                steps=variant.steps,
+                rank=variant.rank,
+                lr=variant.learning_rate,
+                low_vram=low_vram,
+                crop_margin=variant.crop_margin,
+            )
+
+            if progress:
+                progress(index, len(variants), f"Validating {variant.name}")
+            validation_result = repair_workflow._repair_prepared(
+                validation_image,
+                validation_face,
+                validation_mask,
+                weights,
+                prompt,
+                negative_prompt,
+                crop_margin=repair_variant.crop_margin,
+                feather=repair_variant.feather,
+                dilate=repair_variant.dilate,
+                merge_opacity=repair_variant.merge_opacity,
+                seed=seed,
+                lora_scale=repair_variant.lora_scale,
+                reference_images=None,
+                modifier_options=dict(repair_variant.options),
+                debug_prefix=f"training-wizard-{index:02d}",
+            )
+            validation_path = candidate_dir / "validation-repair.png"
+            validation_result.save(validation_path)
+            candidates.append(
+                TrainingWizardCandidate(
+                    index=index,
+                    variant=variant,
+                    output_dir=candidate_dir,
+                    weights_path=weights,
+                    validation_path=validation_path,
+                    validation_image=validation_result,
+                )
+            )
+            validation_results.append(validation_result)
+            labels.append(f"#{index} {variant.label()}")
+
+        focus_box = square_crop_box(validation_face.box, validation_image.size, margin=0.85)
+        comparison_face = comparison_sheet(
+            validation_image,
+            validation_results,
+            labels,
+            focus_box=focus_box,
+            columns=3,
+        )
+        comparison_full = comparison_sheet(
+            validation_image,
+            validation_results,
+            labels,
+            columns=3,
+            tile_size=(420, 300),
+        )
+        comparison_face_path = output_dir / "training-comparison-face.png"
+        comparison_full_path = output_dir / "training-comparison-full.png"
+        comparison_face.save(comparison_face_path)
+        comparison_full.save(comparison_full_path)
+
+        manifest = {
+            "trainer": self.trainer.info.name,
+            "trainer_model_id": self.trainer.info.model_id,
+            "lora_family": self.trainer.info.lora_family,
+            "modifier": repair_workflow.modifier.info.name,
+            "modifier_model_id": repair_workflow.modifier.info.model_id,
+            "preset": preset,
+            "trigger": trigger,
+            "training_face_selector": selector,
+            "training_source_count": len(sources),
+            "trainer_low_vram": low_vram,
+            "validation_seed": seed,
+            "validation_face_selector": validation_face_selector,
+            "validation_face_index": validation_face.index,
+            "validation_face_box": validation_face.box.as_tuple(),
+            "validation_repair_settings": asdict(repair_variant),
+            "comparison_face": str(comparison_face_path),
+            "comparison_full": str(comparison_full_path),
+            "candidates": [
+                {
+                    "index": candidate.index,
+                    "name": candidate.variant.name,
+                    "settings": asdict(candidate.variant),
+                    "output_dir": str(candidate.output_dir),
+                    "weights": str(candidate.weights_path),
+                    "validation_repair": str(candidate.validation_path),
+                }
+                for candidate in candidates
+            ],
+        }
+        manifest_path = output_dir / "training-wizard-results.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        self.debug.step(
+            "training_wizard_complete",
+            preset=preset,
+            candidates=len(candidates),
+            comparison_face=str(comparison_face_path),
+            comparison_full=str(comparison_full_path),
+            manifest=str(manifest_path),
+        )
+        return TrainingWizardRun(
+            output_dir,
+            candidates,
+            comparison_face_path,
+            comparison_full_path,
+            manifest_path,
+            comparison_face,
+            comparison_full,
+        )

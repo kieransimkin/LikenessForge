@@ -93,11 +93,12 @@ Linux/macOS:
 
 The first start can download Python and Python packages. Model **weights** are deliberately separate: the GUI shows whether each selected segmentation/modifier/trainer model is already cached, and its **Download / install selected model weights** button shows live Hugging Face transfer progress. A model is also downloaded automatically if a workflow needs it and it is not present yet.
 
-The GUI has three primary workflows:
+The GUI has four primary workflows:
 
 1. **Train likeness LoRA** — select multiple authorised reference photographs, choose the face detector, segmentation model and LoRA trainer, then prepare face-focused training crops and stream the trainer output live. The finished LoRA is automatically placed into the repair workflows.
-2. **Repair photograph** — expert/single-run mode: choose an original image, detect and select the target face, tune the inference and blend settings directly, run the repair, and preview the composited result.
-3. **Repair wizard** — simplified mode: choose the original photograph, identity LoRA, optional identity references and a Quick/Balanced/Thorough sweep. LikenessForge automatically tries several crop sizes, LoRA strengths, seeds, model settings, mask feather/dilation values and generated-vs-original merge opacities, then saves every candidate and produces labelled original-vs-results comparison sheets.
+2. **Training wizard** — train several LoRAs with different step counts, ranks, learning rates, face crops and background treatments, then run every trained LoRA through the same holdout photograph and repair settings to produce a direct original-vs-training comparison.
+3. **Repair photograph** — expert/single-run mode: choose an original image, detect and select the target face, tune the inference and blend settings directly, run the repair, and preview the composited result.
+4. **Repair wizard** — simplified mode: choose the original photograph, identity LoRA, optional identity references and a Quick/Balanced/Thorough sweep. LikenessForge automatically tries several crop sizes, LoRA strengths, seeds, model settings, mask feather/dilation values and generated-vs-original merge opacities, then saves every candidate and produces labelled original-vs-results comparison sheets.
 
 The OpenCV YuNet detector downloads its tiny ONNX weights from the official OpenCV Hugging Face repository on first use. The legacy `mtcnn` plugin name remains as a deprecated compatibility alias; LikenessForge no longer depends on `facenet-pytorch`, avoiding its obsolete Torch/Torchvision pins.
 
@@ -252,6 +253,51 @@ likenessforge prepare-training ./authorised-photos ./prepared \
 ```
 
 The trainer adapters download the matching **official Hugging Face Diffusers v0.41.0 DreamBooth-LoRA script** into LikenessForge's tool cache and launch it with `accelerate`. The supported trainer is therefore replaceable independently from the rest of the pipeline.
+
+## Training wizard
+
+Training quality can change substantially with LoRA rank, training length, learning rate and how tightly the source photographs are cropped. The training wizard explores a small, deliberate set of those choices and validates every trained LoRA against the **same holdout photograph with the same repair settings**, so differences in the comparison sheet come from training rather than from a changing inference recipe.
+
+Keep the validation photograph out of the training-reference set when possible. A different pose, expression or lighting setup makes the comparison much more useful for spotting a LoRA that generalises rather than merely memorises the training frames.
+
+```bash
+likenessforge train-wizard ./authorised-photos validation.jpg ./training-wizard-results \
+  --detector opencv-yunet \
+  --segmenter sam2-tiny \
+  --trainer sd15-lora \
+  --modifier sd15-inpaint-lowvram \
+  --trigger lf_person \
+  --preset balanced \
+  --low-vram
+```
+
+The trainer and validation modifier must use the same LoRA architecture family. For example, `sd15-lora` pairs with `sd15-inpaint-lowvram`, `sdxl-lora` with `sdxl-inpaint`, and `flux2-klein-lora` with a FLUX.2 Klein modifier.
+
+The sweep sizes are intentionally bounded because every candidate is a complete LoRA training run:
+
+- **Quick:** 3 trainings — baseline, lower rank, and longer training.
+- **Balanced:** 5 trainings — adds higher rank and longer/lower-learning-rate variants.
+- **Thorough:** 8 trainings — also explores tighter identity crops, wider original-context crops, background treatment and a shorter/higher-learning-rate run.
+
+This can still take substantial GPU time and disk space. In particular, FLUX.2 Klein training remains a high-VRAM workload; use the Quick preset first and prefer the SD 1.5/SDXL trainers on smaller GPUs.
+
+Every candidate gets its own folder containing the prepared dataset, LoRA weights, training metadata and a `validation-repair.png` generated from the holdout photograph. The results root also contains:
+
+```text
+training-wizard-results/
+  candidate-01-baseline/
+    prepared-dataset/
+    lora/
+    likenessforge-training.json
+    validation-repair.png
+  candidate-02-low-rank/
+    ...
+  training-comparison-face.png
+  training-comparison-full.png
+  training-wizard-results.json
+```
+
+`training-comparison-face.png` enlarges the same validation-face region for the original and every trained LoRA, while `training-comparison-full.png` shows the complete photograph. `training-wizard-results.json` records every training hyperparameter, LoRA path and fixed validation-repair setting so the preferred training can be reproduced exactly. The desktop **Training wizard** tab previews the face comparison when all candidate trainings finish.
 
 ### FLUX.2 Klein LoRA
 

@@ -382,6 +382,140 @@ class TrainingTab(QWidget):
         return [Path(self.images.item(i).text()) for i in range(self.images.count())]
 
 
+class TrainingWizardTab(QWidget):
+    analyze_requested = Signal()
+    start_requested = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.images = QListWidget()
+        add = QPushButton("Add training references…")
+        remove = QPushButton("Remove selected")
+        clear = QPushButton("Clear")
+        add.clicked.connect(self._add_images)
+        remove.clicked.connect(lambda: _remove_selected_items(self.images))
+        clear.clicked.connect(self.images.clear)
+        image_buttons = QHBoxLayout()
+        image_buttons.addWidget(add)
+        image_buttons.addWidget(remove)
+        image_buttons.addWidget(clear)
+        image_buttons.addStretch(1)
+
+        self.validation = QLineEdit()
+        validation_browse = QPushButton("Browse…")
+        validation_browse.clicked.connect(self._choose_validation)
+        validation_row = QHBoxLayout()
+        validation_row.addWidget(self.validation)
+        validation_row.addWidget(validation_browse)
+        validation_widget = QWidget()
+        validation_widget.setLayout(validation_row)
+
+        self.output = QLineEdit()
+        output_browse = QPushButton("Browse…")
+        output_browse.clicked.connect(self._choose_output)
+        output_row = QHBoxLayout()
+        output_row.addWidget(self.output)
+        output_row.addWidget(output_browse)
+        output_widget = QWidget()
+        output_widget.setLayout(output_row)
+
+        self.trigger = QLineEdit("lf_person")
+        self.face = QLineEdit("largest")
+        self.preset = QComboBox()
+        self.preset.addItem("Quick — 3 trainings", "quick")
+        self.preset.addItem("Balanced — 5 trainings", "balanced")
+        self.preset.addItem("Thorough — 8 trainings", "thorough")
+        self.preset.setCurrentIndex(1)
+        self.seed = QSpinBox()
+        self.seed.setRange(0, 2147483647)
+        self.seed.setValue(0)
+        self.low_vram = QCheckBox("Use trainer low-VRAM/offload options")
+        self.low_vram.setChecked(True)
+
+        self.analyze = QPushButton("Detect validation faces")
+        self.analyze.clicked.connect(self.analyze_requested.emit)
+        self.validation_face = QComboBox()
+        self.validation_face.addItem("Largest face (automatic)", "largest")
+        face_row = QHBoxLayout()
+        face_row.addWidget(self.analyze)
+        face_row.addWidget(QLabel("Validation face"))
+        face_row.addWidget(self.validation_face, 1)
+
+        form = QFormLayout()
+        form.addRow("Validation photograph", validation_widget)
+        form.addRow("Results folder", output_widget)
+        form.addRow("Unique trigger token", self.trigger)
+        form.addRow("Training face selector", self.face)
+        form.addRow("Sweep size", self.preset)
+        form.addRow("Validation seed", self.seed)
+        form.addRow("", self.low_vram)
+
+        explainer = QLabel(
+            "The training wizard trains several LoRAs with different step counts, ranks, learning rates, "
+            "training crops and background treatments. Every LoRA is then tested with the same repair "
+            "settings on the validation photograph so the training quality can be compared directly."
+        )
+        explainer.setWordWrap(True)
+
+        self.validation_preview = ImagePreview("Select a holdout validation photograph")
+        self.result_preview = ImagePreview("The trained-model comparison will appear here")
+        previews = QHBoxLayout()
+        previews.addWidget(self.validation_preview, 1)
+        previews.addWidget(self.result_preview, 1)
+
+        self.start = QPushButton("Run training wizard")
+        self.start.clicked.connect(self.start_requested.emit)
+        self.status = QLabel("Add training references and a separate validation photograph.")
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.log = QPlainTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setMaximumBlockCount(4000)
+        self.log.setMaximumHeight(180)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(explainer)
+        layout.addWidget(QLabel("Training likeness reference images"))
+        layout.addWidget(self.images, 1)
+        layout.addLayout(image_buttons)
+        layout.addLayout(form)
+        layout.addLayout(face_row)
+        layout.addLayout(previews, 1)
+        layout.addWidget(self.start)
+        layout.addWidget(self.status)
+        layout.addWidget(self.progress)
+        layout.addWidget(self.log)
+
+    def _add_images(self) -> None:
+        files, _ = QFileDialog.getOpenFileNames(self, "Select training reference images", "", IMAGE_FILTER)
+        existing = {self.images.item(i).text() for i in range(self.images.count())}
+        for path in files:
+            if path not in existing:
+                self.images.addItem(path)
+                existing.add(path)
+
+    def _choose_validation(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Validation photograph", "", IMAGE_FILTER)
+        if path:
+            self.validation.setText(path)
+            source = Path(path)
+            if not self.output.text().strip():
+                self.output.setText(str(source.with_name(f"{source.stem}-training-wizard")))
+            try:
+                self.validation_preview.set_pil(Image.open(path).convert("RGB"))
+            except OSError as exc:
+                LOG.warning("unable to preview training-wizard validation image %s: %s", path, exc)
+
+    def _choose_output(self) -> None:
+        path = QFileDialog.getExistingDirectory(self, "Training wizard results directory")
+        if path:
+            self.output.setText(path)
+
+    def image_paths(self) -> list[Path]:
+        return [Path(self.images.item(i).text()) for i in range(self.images.count())]
+
+
 class RepairTab(QWidget):
     analyze_requested = Signal()
     repair_requested = Signal()
@@ -695,9 +829,11 @@ class LikenessForgeWindow(QMainWindow):
         self.models = ModelSetupWidget()
         self.tabs = QTabWidget()
         self.training = TrainingTab()
+        self.training_wizard = TrainingWizardTab()
         self.repair = RepairTab()
         self.wizard = RepairWizardTab()
         self.tabs.addTab(self.training, "Train likeness LoRA")
+        self.tabs.addTab(self.training_wizard, "Training wizard")
         self.tabs.addTab(self.repair, "Repair photograph")
         self.tabs.addTab(self.wizard, "Repair wizard")
         layout.addWidget(self.models)
@@ -706,6 +842,8 @@ class LikenessForgeWindow(QMainWindow):
 
         self.models.download_requested.connect(self.download_selected_models)
         self.training.start_requested.connect(self.start_training)
+        self.training_wizard.analyze_requested.connect(self.analyze_training_wizard_faces)
+        self.training_wizard.start_requested.connect(self.start_training_wizard)
         self.repair.analyze_requested.connect(self.analyze_faces)
         self.repair.repair_requested.connect(self.start_repair)
         self.wizard.analyze_requested.connect(self.analyze_wizard_faces)
@@ -838,6 +976,174 @@ class LikenessForgeWindow(QMainWindow):
             self._show_error(text)
 
         self._start_worker(task, done, failed, self.training.log)
+
+    def analyze_training_wizard_faces(self) -> None:
+        source = (
+            Path(self.training_wizard.validation.text()).expanduser()
+            if self.training_wizard.validation.text()
+            else None
+        )
+        if source is None or not source.is_file():
+            QMessageBox.warning(
+                self,
+                "Validation photograph",
+                "Choose an existing validation photograph first.",
+            )
+            return
+        detector_name = self.models.selected("detector")
+        self.training_wizard.analyze.setEnabled(False)
+        self.training_wizard.status.setText("Detecting validation faces…")
+
+        def task(worker: TaskThread):
+            store = ModelStore(progress_callback=worker.model_event.emit)
+            detector = create("detector", detector_name, store)
+            image = Image.open(source).convert("RGB")
+            workflow = RepairWorkflow(
+                detector,
+                None,
+                None,
+                DebugSink(False, event_callback=self._debug_callback(worker)),
+            )
+            faces = workflow.inspect_faces(image)
+            return faces, annotate_faces(image, faces)
+
+        def done(result):
+            faces, preview = result
+            self.training_wizard.analyze.setEnabled(True)
+            self.training_wizard.validation_face.clear()
+            self.training_wizard.validation_face.addItem("Largest face (automatic)", "largest")
+            for face in faces:
+                self.training_wizard.validation_face.addItem(
+                    f"Face {face.index} — score {face.score:.3f} — {face.box.width}×{face.box.height}",
+                    face.index,
+                )
+            self.training_wizard.validation_preview.set_pil(preview)
+            self.training_wizard.status.setText(
+                f"Found {len(faces)} face(s). Choose the validation face or leave automatic selected."
+                if faces
+                else "No faces detected."
+            )
+
+        def failed(text):
+            self.training_wizard.analyze.setEnabled(True)
+            self.training_wizard.status.setText("Validation face detection failed")
+            self._show_error(text)
+
+        self._start_worker(task, done, failed, self.training_wizard.log)
+
+    def start_training_wizard(self) -> None:
+        sources = self.training_wizard.image_paths()
+        validation = (
+            Path(self.training_wizard.validation.text()).expanduser()
+            if self.training_wizard.validation.text()
+            else None
+        )
+        output = (
+            Path(self.training_wizard.output.text()).expanduser()
+            if self.training_wizard.output.text()
+            else None
+        )
+        trigger = self.training_wizard.trigger.text().strip()
+        if not sources:
+            QMessageBox.warning(self, "Training references", "Add at least one likeness reference image.")
+            return
+        if validation is None or not validation.is_file():
+            QMessageBox.warning(
+                self,
+                "Validation photograph",
+                "Choose an existing holdout validation photograph.",
+            )
+            return
+        if output is None:
+            QMessageBox.warning(self, "Results folder", "Choose a results folder.")
+            return
+        if not trigger:
+            QMessageBox.warning(self, "Trigger token", "Enter a unique LoRA trigger token.")
+            return
+
+        detector_name = self.models.selected("detector")
+        segmenter_name = self.models.selected("segmenter")
+        trainer_name = self.models.selected("trainer")
+        modifier_name = self.models.selected("modifier")
+        trainer_info = plugin_classes("trainer")[trainer_name].info
+        modifier_info = plugin_classes("modifier")[modifier_name].info
+        if trainer_info.lora_family != modifier_info.lora_family:
+            QMessageBox.warning(
+                self,
+                "LoRA family mismatch",
+                f"Training wizard validation requires matching families. {trainer_name} produces "
+                f"{trainer_info.lora_family}, but {modifier_name} expects {modifier_info.lora_family}.",
+            )
+            return
+
+        low_vram_mode = self.models.low_vram.currentText()
+        training_low_vram = self.training_wizard.low_vram.isChecked()
+        training_face_selector = self.training_wizard.face.text().strip() or "largest"
+        validation_face_selector = self.training_wizard.validation_face.currentData(Qt.UserRole)
+        if validation_face_selector is None:
+            validation_face_selector = "largest"
+        preset = str(self.training_wizard.preset.currentData(Qt.UserRole) or "balanced")
+        seed = self.training_wizard.seed.value()
+        cfg = ForgeConfig()
+
+        self.training_wizard.start.setEnabled(False)
+        self.training_wizard.progress.setRange(0, 0)
+        self.training_wizard.status.setText("Running training sweep…")
+        self.training_wizard.log.clear()
+
+        def task(worker: TaskThread):
+            store = ModelStore(progress_callback=worker.model_event.emit)
+            detector = create("detector", detector_name, store)
+            segmenter = create("segmenter", segmenter_name, store)
+            trainer = create("trainer", trainer_name, store, progress_callback=worker.report)
+            modifier = create("modifier", modifier_name, store, low_vram=low_vram_mode)
+            validation_image = Image.open(validation).convert("RGB")
+            debug = DebugSink(False, event_callback=self._debug_callback(worker))
+            training_workflow = TrainingWorkflow(detector, segmenter, trainer, debug)
+            repair_workflow = RepairWorkflow(detector, segmenter, modifier, debug)
+
+            def progress(index, total, label):
+                worker.report(f"Candidate {index}/{total}: {label}")
+
+            return training_workflow.wizard(
+                source_dir=sources,
+                validation_image=validation_image,
+                repair_workflow=repair_workflow,
+                output_dir=output,
+                trigger=trigger,
+                selector=training_face_selector,
+                validation_face_selector=validation_face_selector,
+                preset=preset,
+                seed=seed,
+                low_vram=training_low_vram,
+                prompt=cfg.prompt,
+                negative_prompt=cfg.negative_prompt,
+                progress=progress,
+            )
+
+        def done(run):
+            self.training_wizard.start.setEnabled(True)
+            self.training_wizard.progress.setRange(0, 100)
+            self.training_wizard.progress.setValue(100)
+            self.training_wizard.status.setText(f"Training wizard complete: {run.output_dir}")
+            self.training_wizard.result_preview.set_pil(run.comparison_face)
+            for candidate in run.candidates:
+                self.training_wizard.log.appendPlainText(
+                    f"#{candidate.index} {candidate.variant.name}: {candidate.weights_path}"
+                )
+            self.training_wizard.log.appendPlainText(f"Face comparison: {run.comparison_face_path}")
+            self.training_wizard.log.appendPlainText(f"Full comparison: {run.comparison_full_path}")
+            self.training_wizard.log.appendPlainText(f"Settings manifest: {run.manifest_path}")
+
+        def failed(text):
+            self.training_wizard.start.setEnabled(True)
+            self.training_wizard.progress.setRange(0, 100)
+            self.training_wizard.progress.setValue(0)
+            self.training_wizard.status.setText("Training wizard failed")
+            self.training_wizard.log.appendPlainText(text)
+            self._show_error(text)
+
+        self._start_worker(task, done, failed, self.training_wizard.log)
 
     def analyze_faces(self) -> None:
         source = Path(self.repair.source.text()).expanduser() if self.repair.source.text() else None
