@@ -1,15 +1,33 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from huggingface_hub import hf_hub_download, snapshot_download
-from platformdirs import user_cache_dir
 
 LOG = logging.getLogger("likenessforge")
+PROJECT_ROOT_ENV = "LIKENESSFORGE_PROJECT_ROOT"
+
+
+def find_project_root() -> Path:
+    """Locate the LikenessForge project root used for project-local model storage."""
+    explicit = os.environ.get(PROJECT_ROOT_ENV)
+    if explicit:
+        return Path(explicit).expanduser().resolve()
+
+    starts = (Path.cwd(), Path(__file__).resolve().parent)
+    for start in starts:
+        for candidate in (start, *start.parents):
+            if (candidate / "pyproject.toml").is_file() and (candidate / "src" / "likenessforge").is_dir():
+                return candidate.resolve()
+
+    # A wheel may be executed outside a source checkout. In that case the caller's
+    # working directory is the only meaningful project directory available.
+    return Path.cwd().resolve()
 
 
 @dataclass(frozen=True)
@@ -38,10 +56,13 @@ ProgressCallback = Callable[[ModelProgress], None]
 class ModelStore:
     def __init__(
         self,
-        cache_dir: str | Path | None = None,
+        project_root: str | Path | None = None,
         progress_callback: ProgressCallback | None = None,
     ):
-        self.root = Path(cache_dir or user_cache_dir("LikenessForge", "Kieran Simkin"))
+        self.project_root = (
+            Path(project_root).expanduser().resolve() if project_root is not None else find_project_root()
+        )
+        self.root = self.project_root / "models"
         self.hf = self.root / "huggingface"
         self.tools = self.root / "tools"
         self.hf.mkdir(parents=True, exist_ok=True)
@@ -50,6 +71,13 @@ class ModelStore:
 
     def set_progress_callback(self, callback: ProgressCallback | None) -> None:
         self.progress_callback = callback
+
+    def resolve_local_or_hf(self, value: str | Path) -> Path:
+        """Resolve an existing local asset or cache a Hugging Face repository project-locally."""
+        local = Path(value).expanduser()
+        if local.exists():
+            return local.resolve()
+        return self.ensure_hf_snapshot(str(value))
 
     def _emit(self, stage: str, repo_id: str, **kwargs) -> None:
         if self.progress_callback:

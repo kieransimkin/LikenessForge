@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Stop"
 Set-Location -LiteralPath $PSScriptRoot
+$env:LIKENESSFORGE_PROJECT_ROOT = $PSScriptRoot
 
 function Find-Uv {
     $command = Get-Command uv -ErrorAction SilentlyContinue

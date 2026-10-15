@@ -146,9 +146,9 @@ class ImagePreview(QLabel):
 class ModelSetupWidget(QGroupBox):
     download_requested = Signal()
 
-    def __init__(self, cache_dir: str | Path | None = None, parent=None):
+    def __init__(self, parent=None):
         super().__init__("Models", parent)
-        self.store = ModelStore(cache_dir)
+        self.store = ModelStore()
         self.detector = QComboBox()
         self.segmenter = QComboBox()
         self.modifier = QComboBox()

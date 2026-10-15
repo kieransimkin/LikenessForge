@@ -12,11 +12,13 @@ def test_gui_launchers_bootstrap_uv_and_use_managed_environment():
     assert '"$UV_BIN" python install' in shell
     assert '"$UV_BIN" sync --extra all' in shell
     assert "likenessforge-gui" in shell
+    assert 'LIKENESSFORGE_PROJECT_ROOT="$SCRIPT_DIR"' in shell
 
     assert "astral.sh/uv/install.ps1" in powershell
     assert "python install" in powershell
     assert "sync --extra all" in powershell
     assert "likenessforge-gui" in powershell
+    assert "$env:LIKENESSFORGE_PROJECT_ROOT = $PSScriptRoot" in powershell
 
     assert "start-gui.ps1" in batch
     assert "ExecutionPolicy Bypass" in batch

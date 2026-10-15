@@ -20,7 +20,6 @@ class ForgeConfig:
     segmenter: PluginSelection = field(default_factory=lambda: PluginSelection("soft-face"))
     modifier: PluginSelection = field(default_factory=lambda: PluginSelection("sd15-inpaint-lowvram"))
     trainer: PluginSelection = field(default_factory=lambda: PluginSelection("sd15-lora"))
-    cache_dir: str | None = None
     low_vram: str = "auto"
     crop_margin: float = 0.55
     feather: int = 32
@@ -62,7 +61,7 @@ def load_config(path: str | Path | None) -> ForgeConfig:
     cfg.segmenter = _selection(plugins.get("segmenter"), cfg.segmenter.name)
     cfg.modifier = _selection(plugins.get("modifier"), cfg.modifier.name)
     cfg.trainer = _selection(plugins.get("trainer"), cfg.trainer.name)
-    for key in ("cache_dir", "low_vram", "crop_margin", "feather", "blend", "prompt", "negative_prompt"):
+    for key in ("low_vram", "crop_margin", "feather", "blend", "prompt", "negative_prompt"):
         if key in data:
             setattr(cfg, key, data[key])
     return cfg

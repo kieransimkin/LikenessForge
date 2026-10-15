@@ -76,7 +76,8 @@ class Flux2KleinModifier(ImageModifier):
         pipe, torch, _device = self._load(low_vram=self._wants_low_vram())
         if request.lora:
             LOG.info("loading LoRA: %s", request.lora)
-            pipe.load_lora_weights(str(request.lora), adapter_name="identity")
+            lora_path = self.store.resolve_local_or_hf(request.lora)
+            pipe.load_lora_weights(str(lora_path), adapter_name="identity")
             if hasattr(pipe, "set_adapters"):
                 pipe.set_adapters(["identity"], adapter_weights=[float(request.lora_scale)])
         images = [request.image] + list(request.reference_images)

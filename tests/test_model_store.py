@@ -19,7 +19,7 @@ def test_model_store_emits_download_progress(monkeypatch, tmp_path: Path):
         return str(target)
 
     monkeypatch.setattr(model_store, "snapshot_download", fake_snapshot_download)
-    store = ModelStore(tmp_path / "cache", progress_callback=events.append)
+    store = ModelStore(project_root=tmp_path, progress_callback=events.append)
     result = store.ensure_hf_snapshot("example/model")
 
     assert result == tmp_path / "snapshot"
@@ -28,3 +28,34 @@ def test_model_store_emits_download_progress(monkeypatch, tmp_path: Path):
     assert "file_progress" in stages
     assert stages[-1] == "model_ready"
     assert events[-1].path == str(result)
+
+
+def test_model_store_is_always_project_local(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("LIKENESSFORGE_PROJECT_ROOT", str(tmp_path))
+    store = ModelStore()
+
+    assert store.project_root == tmp_path.resolve()
+    assert store.root == tmp_path.resolve() / "models"
+    assert store.hf == tmp_path.resolve() / "models" / "huggingface"
+    assert store.tools == tmp_path.resolve() / "models" / "tools"
+    assert store.hf.is_dir()
+    assert store.tools.is_dir()
+
+
+def test_project_models_directory_is_gitignored():
+    root = Path(__file__).resolve().parents[1]
+    patterns = (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "models/" in patterns
+
+
+def test_remote_asset_resolution_uses_project_huggingface_cache(monkeypatch, tmp_path: Path):
+    store = ModelStore(project_root=tmp_path)
+    expected = tmp_path / "models" / "huggingface" / "snapshot"
+
+    def fake_ensure(repo_id, revision=None, allow_patterns=None, ignore_patterns=None):
+        assert repo_id == "example/identity-lora"
+        expected.mkdir(parents=True, exist_ok=True)
+        return expected
+
+    monkeypatch.setattr(store, "ensure_hf_snapshot", fake_ensure)
+    assert store.resolve_local_or_hf("example/identity-lora") == expected

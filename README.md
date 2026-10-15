@@ -35,7 +35,33 @@ The core repair workflow is:
 | trainer | `sdxl-lora` | SDXL base | higher-quality identity LoRA |
 | trainer | `flux2-klein-lora` | FLUX.2 Klein Base 4B | official Klein DreamBooth-LoRA training |
 
-Model files are downloaded on first use and cached under the platform cache directory (or `--cache-dir`). `ModelStore` emits structured model/file progress events; the GUI renders those as live status and byte progress while keeping the same automatic caching behaviour used by the CLI. The inference model license still applies independently of LikenessForge's MIT code license.
+Model files are downloaded on first use into the repository-local `models/` directory. Hugging Face snapshots live under `models/huggingface/` and downloaded trainer/helper files under `models/tools/`. `ModelStore` emits structured model/file progress events; the GUI renders those as live status and byte progress while keeping the same automatic caching behaviour used by the CLI. The `models/` directory is git-ignored so multi-gigabyte weights and partial downloads cannot be committed accidentally. The inference model license still applies independently of LikenessForge's MIT code license.
+
+
+### Model storage and cleanup
+
+LikenessForge deliberately keeps model assets with the project rather than in a hidden OS cache:
+
+```text
+LikenessForge/
+  models/
+    huggingface/   # model snapshots, blobs and incomplete Hugging Face downloads
+    tools/         # downloaded trainer/helper scripts
+```
+
+To remove every project-local model download, including interrupted/partial downloads, run this from the repository root in PowerShell:
+
+```powershell
+Remove-Item -LiteralPath .\models -Recurse -Force -ErrorAction SilentlyContinue
+```
+
+Older LikenessForge versions used the Windows platform cache. To remove both the old cache and the new project-local cache:
+
+```powershell
+@(".\models", (Join-Path $env:LOCALAPPDATA "Kieran Simkin\LikenessForge\Cache")) |
+  Where-Object { Test-Path -LiteralPath $_ } |
+  ForEach-Object { Remove-Item -LiteralPath $_ -Recurse -Force }
+```
 
 ### 8 GB GPUs
 

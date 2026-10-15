@@ -20,7 +20,6 @@ def _add_common(parser):
     parser.add_argument("--config", help="YAML/JSON/TOML configuration file")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose trace + save every intermediate image")
     parser.add_argument("--debug-dir", default="likenessforge-debug", help="Root for verbose intermediate artefacts")
-    parser.add_argument("--cache-dir", help="Override model/tool cache directory")
 
 
 def _plugin(args, cfg, store, kind):
@@ -116,7 +115,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     _logging(args.verbose)
     cfg = load_config(getattr(args, "config", None))
-    store = ModelStore(getattr(args, "cache_dir", None) or cfg.cache_dir)
+    store = ModelStore()
     debug = DebugSink(args.verbose, args.debug_dir)
 
     if args.command == "gui":

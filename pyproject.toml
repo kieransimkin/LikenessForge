@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "likenessforge"
-version = "0.2.1"
+version = "0.2.2"
 description = "Modular identity-preserving image repair and LoRA training for the DanceFlow ecosystem."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,7 +13,6 @@ authors = [{name = "Kieran Simkin"}]
 dependencies = [
   "numpy>=1.24,<3",
   "Pillow>=10.4",
-  "platformdirs>=4.2",
   "huggingface-hub>=0.30",
   "PyYAML>=6.0",
   "requests>=2.32",

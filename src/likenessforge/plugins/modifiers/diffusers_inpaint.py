@@ -33,7 +33,8 @@ class _DiffusersInpaint(ImageModifier):
         pipe, torch, device = self._load()
         if request.lora:
             LOG.info("loading LoRA: %s", request.lora)
-            pipe.load_lora_weights(str(request.lora), adapter_name="identity")
+            lora_path = self.store.resolve_local_or_hf(request.lora)
+            pipe.load_lora_weights(str(lora_path), adapter_name="identity")
             if hasattr(pipe, "set_adapters"):
                 pipe.set_adapters(["identity"], adapter_weights=[request.lora_scale])
         gen_device = device if device != "cuda" or not hasattr(pipe, "_execution_device") else pipe._execution_device
