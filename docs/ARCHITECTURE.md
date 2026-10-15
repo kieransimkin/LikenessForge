@@ -2,7 +2,7 @@
 
 LikenessForge is deliberately split into four model/plugin families.
 
-1. **Detector** – locates faces and returns stable numbered bounding boxes/landmarks.
+1. **Detector** – locates faces and returns stable numbered bounding boxes/landmarks. The recommended built-in detector is OpenCV YuNet, whose tiny ONNX model is independent of the PyTorch/Torchvision stack used by diffusion backends.
 2. **Segmenter** – converts the chosen face box into a pixel mask. It can be a tiny geometric fallback or a learned segmenter such as SAM 2.1 Tiny.
 3. **Modifier** – edits the cropped face region. It receives an RGB crop, mask, prompt, optional LoRA, seed and optional reference images.
 4. **Trainer** – prepares/launches a model-family-specific LoRA training job. The core workflow first uses the selected detector and segmenter to make model-sized face crops.

@@ -17,6 +17,7 @@ KINDS = {
 
 def _builtins() -> dict[str, dict[str, type]]:
     from likenessforge.plugins.detectors.mtcnn import MTCNNDetector
+    from likenessforge.plugins.detectors.yunet import OpenCVYuNetDetector
     from likenessforge.plugins.detectors.opencv_haar import OpenCVHaarDetector
     from likenessforge.plugins.modifiers.diffusers_inpaint import SD15InpaintModifier, SDXLInpaintModifier
     from likenessforge.plugins.modifiers.flux2_klein import Flux2KleinModifier, Flux2KleinLowVRAMModifier
@@ -31,6 +32,7 @@ def _builtins() -> dict[str, dict[str, type]]:
     return {
         "detector": {
             OpenCVHaarDetector.info.name: OpenCVHaarDetector,
+            OpenCVYuNetDetector.info.name: OpenCVYuNetDetector,
             MTCNNDetector.info.name: MTCNNDetector,
         },
         "segmenter": {

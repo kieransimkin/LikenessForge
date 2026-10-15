@@ -1,6 +1,6 @@
 plugins:
   detector:
-    name: mtcnn
+    name: opencv-yunet
     options:
       min_face_size: 32
   segmenter:

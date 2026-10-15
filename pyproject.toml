@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "likenessforge"
-version = "0.2.0"
+version = "0.2.1"
 description = "Modular identity-preserving image repair and LoRA training for the DanceFlow ecosystem."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,7 +24,6 @@ dependencies = [
 gui = ["PySide6>=6.8,<7"]
 faces = [
   "opencv-python-headless>=4.10",
-  "facenet-pytorch>=2.6",
   "torch>=2.5",
   "torchvision>=0.20",
 ]
@@ -61,7 +60,6 @@ training = [
 all = [
   "PySide6>=6.8,<7",
   "opencv-python-headless>=4.10",
-  "facenet-pytorch>=2.6",
   "torch>=2.5",
   "torchvision>=0.20",
   "diffusers>=0.41.0",

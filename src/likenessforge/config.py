@@ -16,7 +16,7 @@ class PluginSelection:
 
 @dataclass
 class ForgeConfig:
-    detector: PluginSelection = field(default_factory=lambda: PluginSelection("opencv-haar"))
+    detector: PluginSelection = field(default_factory=lambda: PluginSelection("opencv-yunet"))
     segmenter: PluginSelection = field(default_factory=lambda: PluginSelection("soft-face"))
     modifier: PluginSelection = field(default_factory=lambda: PluginSelection("sd15-inpaint-lowvram"))
     trainer: PluginSelection = field(default_factory=lambda: PluginSelection("sd15-lora"))

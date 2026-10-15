@@ -23,7 +23,8 @@ The core repair workflow is:
 | Type | Plugin | Model | Typical use |
 |---|---|---|---|
 | detector | `opencv-haar` | bundled OpenCV cascade | zero-download CPU fallback |
-| detector | `mtcnn` | facenet-pytorch MTCNN | stronger compact face detection + landmarks |
+| detector | `opencv-yunet` | `opencv/face_detection_yunet` | **recommended lightweight detector**, five landmarks, CPU-friendly |
+| detector | `mtcnn` | compatibility alias for `opencv-yunet` | deprecated name retained for old configs |
 | segmenter | `soft-face` | none | fast elliptical mask fallback |
 | segmenter | `sam2-tiny` | `facebook/sam2.1-hiera-tiny` | learned promptable segmentation |
 | modifier | `sd15-inpaint-lowvram` | `stable-diffusion-v1-5/stable-diffusion-inpainting` | **8 GB-safe baseline**, 512px |
@@ -71,6 +72,8 @@ The GUI has two primary workflows:
 1. **Train likeness LoRA** — select multiple authorised reference photographs, choose the face detector, segmentation model and LoRA trainer, then prepare face-focused training crops and stream the trainer output live. The finished LoRA is automatically placed into the repair workflow.
 2. **Repair photograph** — choose an original image, detect and select the target face when more than one is present, choose the segmentation and modification models, select a compatible LoRA, run the repair, and preview the composited result.
 
+The OpenCV YuNet detector downloads its tiny ONNX weights from the official OpenCV Hugging Face repository on first use. The legacy `mtcnn` plugin name remains as a deprecated compatibility alias; LikenessForge no longer depends on `facenet-pytorch`, avoiding its obsolete Torch/Torchvision pins.
+
 The model panel warns when the selected LoRA trainer and image modifier belong to incompatible architecture families (for example SDXL vs FLUX.2 Klein). Training writes `likenessforge-training.json` alongside its output so a LoRA produced by LikenessForge can be checked again when it is selected for repair.
 
 ### Manual install
@@ -116,7 +119,7 @@ likenessforge models download sd15-inpaint-lowvram
 ## Identify the face index
 
 ```bash
-likenessforge faces photo.jpg --detector mtcnn --preview faces.png
+likenessforge faces photo.jpg --detector opencv-yunet --preview faces.png
 ```
 
 Example output:
@@ -132,7 +135,7 @@ Small/8 GB-friendly path:
 
 ```bash
 likenessforge repair input.png repaired.png \
-  --detector mtcnn \
+  --detector opencv-yunet \
   --segmenter sam2-tiny \
   --modifier sd15-inpaint-lowvram \
   --face 0 \
@@ -146,7 +149,7 @@ SDXL:
 
 ```bash
 likenessforge repair input.png repaired.png \
-  --detector mtcnn --segmenter sam2-tiny --modifier sdxl-inpaint \
+  --detector opencv-yunet --segmenter sam2-tiny --modifier sdxl-inpaint \
   --face 0 --lora ./loras/person.safetensors --strength 0.52
 ```
 
@@ -154,7 +157,7 @@ FLUX.2 Klein low-VRAM path:
 
 ```bash
 likenessforge repair input.png repaired.png \
-  --detector mtcnn --segmenter sam2-tiny \
+  --detector opencv-yunet --segmenter sam2-tiny \
   --modifier flux2-klein-4b-lowvram \
   --face 0 --lora ./loras/person-klein.safetensors \
   --reference clear-reference.jpg \
@@ -169,7 +172,7 @@ LikenessForge first uses the **selected detector + selected segmenter** to reduc
 
 ```bash
 likenessforge train-lora ./authorised-photos ./training/kieran \
-  --detector mtcnn \
+  --detector opencv-yunet \
   --segmenter sam2-tiny \
   --trainer sdxl-lora \
   --trigger lf_kieran \
@@ -181,7 +184,7 @@ To inspect the prepared data before spending GPU time:
 
 ```bash
 likenessforge prepare-training ./authorised-photos ./prepared \
-  --detector mtcnn --segmenter sam2-tiny --trainer sdxl-lora \
+  --detector opencv-yunet --segmenter sam2-tiny --trainer sdxl-lora \
   --trigger lf_kieran -v
 ```
 
@@ -191,7 +194,7 @@ The trainer adapters download the matching **official Hugging Face Diffusers v0.
 
 ```bash
 likenessforge train-lora ./authorised-photos ./training/kieran-klein \
-  --detector mtcnn --segmenter sam2-tiny \
+  --detector opencv-yunet --segmenter sam2-tiny \
   --trainer flux2-klein-lora --trigger lf_kieran --steps 1000
 ```
 
