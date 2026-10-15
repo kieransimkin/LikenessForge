@@ -5,7 +5,6 @@ from importlib.metadata import entry_points
 from typing import Any
 
 from likenessforge.model_store import ModelStore
-from likenessforge.plugins.base import FaceDetector, FaceSegmenter, ImageModifier, LoraTrainer
 
 
 KINDS = {
@@ -92,6 +91,7 @@ def describe_plugins() -> list[dict[str, Any]]:
                     "model_id": info.model_id,
                     "preferred_size": info.preferred_size,
                     "low_vram": info.low_vram,
+                    "lora_family": info.lora_family,
                 }
             )
     return rows

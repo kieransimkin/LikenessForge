@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+from collections.abc import Iterable
 from pathlib import Path
 
 from PIL import Image
@@ -19,6 +21,22 @@ from likenessforge.types import ModifyRequest, TrainingRequest
 
 
 LOG = logging.getLogger("likenessforge")
+
+def _training_sources(source: Path | str | Iterable[Path | str]):
+    if isinstance(source, (str, Path)):
+        path = Path(source)
+        if path.is_dir():
+            yield from iter_images(path)
+            return
+        if path.is_file():
+            yield path
+            return
+        raise FileNotFoundError(path)
+    for item in source:
+        path = Path(item)
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        yield path
 
 
 class RepairWorkflow:
@@ -118,7 +136,7 @@ class TrainingWorkflow:
 
     def prepare_dataset(
         self,
-        source_dir: Path,
+        source_dir: Path | str | Iterable[Path | str],
         prepared_dir: Path,
         trigger: str,
         selector: str | int = "largest",
@@ -126,7 +144,7 @@ class TrainingWorkflow:
     ) -> int:
         prepared_dir.mkdir(parents=True, exist_ok=True)
         count = 0
-        for source in iter_images(source_dir):
+        for source in _training_sources(source_dir):
             image = Image.open(source).convert("RGB")
             faces = self.detector.detect(image)
             if not faces:
@@ -157,7 +175,7 @@ class TrainingWorkflow:
 
     def train(
         self,
-        source_dir: Path,
+        source_dir: Path | str | Iterable[Path | str],
         output_dir: Path,
         trigger: str,
         selector: str | int = "largest",
@@ -191,4 +209,21 @@ class TrainingWorkflow:
             rank=rank,
             low_vram=low_vram,
         )
-        return self.trainer.train(req)
+        weights = self.trainer.train(req)
+        metadata = {
+            "trigger": trigger,
+            "trainer": self.trainer.info.name,
+            "model_id": self.trainer.info.model_id,
+            "lora_family": self.trainer.info.lora_family,
+            "weights": str(weights),
+            "prepared_images": count,
+            "resolution": req.resolution,
+            "steps": steps,
+            "rank": rank,
+            "learning_rate": lr,
+            "low_vram": low_vram,
+        }
+        metadata_path = output_dir / "likenessforge-training.json"
+        metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        self.debug.step("training_complete", weights=str(weights), metadata=str(metadata_path))
+        return weights

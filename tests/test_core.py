@@ -7,14 +7,15 @@ from likenessforge.config import load_config
 from likenessforge.debug import DebugSink
 from likenessforge.image_ops import composite_crop, select_face, stable_face_order
 from likenessforge.types import Box, FaceCandidate
-from likenessforge.workflow import RepairWorkflow
+from likenessforge.workflow import RepairWorkflow, TrainingWorkflow
 
 
 class DummyInfo:
-    def __init__(self, name, model_id=None, preferred_size=64):
+    def __init__(self, name, model_id=None, preferred_size=64, lora_family=None):
         self.name = name
         self.model_id = model_id
         self.preferred_size = preferred_size
+        self.lora_family = lora_family
 
 
 class DummyDetector:
@@ -82,3 +83,36 @@ def test_yaml_config(tmp_path: Path):
     assert cfg.modifier.name == "sdxl-inpaint"
     assert cfg.modifier.options["steps"] == 12
     assert cfg.feather == 24
+
+
+class DummyTrainer:
+    info = DummyInfo("dummy-trainer", "dummy/base", 64, "dummy")
+
+    @property
+    def preferred_size(self):
+        return 64
+
+    def train(self, request):
+        request.output_dir.mkdir(parents=True, exist_ok=True)
+        weights = request.output_dir / "identity.safetensors"
+        weights.write_bytes(b"dummy")
+        return weights
+
+
+def test_training_workflow_accepts_selected_reference_files(tmp_path: Path):
+    refs = []
+    for index in range(2):
+        path = tmp_path / f"reference-{index}.png"
+        Image.new("RGB", (128, 96), (40 + index, 50, 60)).save(path)
+        refs.append(path)
+
+    output = tmp_path / "training"
+    workflow = TrainingWorkflow(DummyDetector(), DummySegmenter(), DummyTrainer(), DebugSink(False))
+    weights = workflow.train(refs, output, "lf_subject", steps=2, rank=4)
+
+    assert weights.exists()
+    prepared = sorted((output / "prepared-dataset").glob("*.png"))
+    assert len(prepared) == 2
+    metadata = (output / "likenessforge-training.json").read_text(encoding="utf-8")
+    assert '"lora_family": "dummy"' in metadata
+    assert '"prepared_images": 2' in metadata

@@ -27,3 +27,21 @@ The generated crop is never pasted as a square. Only the selected face mask is c
 `training photos -> detect -> choose face -> segment -> tighten around mask -> resize to trainer preferred size -> suppress background -> captions -> trainer`
 
 This keeps the training set focused on identity and avoids wasting capacity on unrelated background detail.
+
+
+## Desktop GUI
+
+The Qt GUI in `likenessforge.gui` is deliberately an orchestration layer, not a second implementation of the image pipeline. It creates the same registered detector/segmenter/modifier/trainer plugins and calls `RepairWorkflow` / `TrainingWorkflow` in `TaskThread` workers so model downloads, inference and training cannot block the Qt event loop.
+
+`ModelStore` accepts a structured progress callback. Hugging Face's `tqdm_class` hook is adapted into `ModelProgress` events, allowing GUI, CLI or future HTTP frontends to observe model checks, per-file byte progress, completion and failures without coupling the store to Qt.
+
+The GUI exposes global plugin selection plus two workflow tabs:
+
+- **Train likeness LoRA** accepts an explicit list of reference image paths. `TrainingWorkflow` still owns segmentation/cropping and writes `likenessforge-training.json` with the trainer/model/LoRA-family metadata.
+- **Repair photograph** uses face detection first so the user can select a stable face index, then invokes the normal repair/crop/modify/feathered-composite pipeline.
+
+Training subprocess output is streamed from `accelerate` through the trainer plugin callback. `DebugSink` also supports an event callback, so exact workflow steps and saved intermediate artefacts can be shown live without changing the core workflow.
+
+## Bootstrap and CI
+
+`.python-version` pins the default uv-managed development/runtime interpreter. `start-gui.sh`, `start-gui.ps1` and `start-gui.bat` bootstrap uv when absent, let uv install Python, sync the `all` extra, and launch the GUI. The GitHub test workflow intentionally installs only `gui` + `dev` extras because plugin registration and GUI construction are testable without downloading multi-gigabyte model runtimes or weights.

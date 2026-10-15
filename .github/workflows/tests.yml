@@ -1,0 +1,101 @@
+name: Tests and distribution validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12", "3.13"]
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install test and GUI dependencies
+        run: uv sync --extra gui --extra dev
+
+      - name: Run unit and GUI smoke tests
+        run: uv run pytest -q
+
+      - name: Lint Python
+        run: uv run ruff check src tests
+
+      - name: Validate Bash launcher syntax
+        run: bash -n start-gui.sh
+
+  windows-launcher:
+    name: Windows launcher syntax
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Parse PowerShell launcher
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path ./start-gui.ps1),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List | Out-String | Write-Error
+            exit 1
+          }
+
+      - name: Check batch launcher delegates to PowerShell bootstrap
+        shell: pwsh
+        run: |
+          $text = Get-Content ./start-gui.bat -Raw
+          if ($text -notmatch 'start-gui\.ps1' -or $text -notmatch 'ExecutionPolicy Bypass') {
+            throw 'start-gui.bat does not delegate to the bootstrapping PowerShell launcher'
+          }
+
+  build:
+    name: Build package
+    needs: [test, windows-launcher]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Build wheel and source distribution
+        run: uv build
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: likenessforge-dist
+          path: dist/

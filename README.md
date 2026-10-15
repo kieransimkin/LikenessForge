@@ -2,7 +2,7 @@
 
 **Identity-preserving image repair for the DanceFlow ecosystem.**
 
-LikenessForge is a local-first, modular CLI for taking an existing image whose composition is already right and repairing the facial likeness of a selected person using an identity LoRA. Face detection, face segmentation, image modification and LoRA training are independent plugin families, so the pipeline can evolve as smaller image models improve.
+LikenessForge is a local-first, modular CLI **and desktop GUI** for taking an existing image whose composition is already right and repairing the facial likeness of a selected person using an identity LoRA. Face detection, face segmentation, image modification and LoRA training are independent plugin families, so the pipeline can evolve as smaller image models improve.
 
 ## What it does
 
@@ -34,7 +34,7 @@ The core repair workflow is:
 | trainer | `sdxl-lora` | SDXL base | higher-quality identity LoRA |
 | trainer | `flux2-klein-lora` | FLUX.2 Klein Base 4B | official Klein DreamBooth-LoRA training |
 
-Model files are downloaded on first use and cached under the platform cache directory (or `--cache-dir`). The inference model license still applies independently of LikenessForge's MIT code license.
+Model files are downloaded on first use and cached under the platform cache directory (or `--cache-dir`). `ModelStore` emits structured model/file progress events; the GUI renders those as live status and byte progress while keeping the same automatic caching behaviour used by the CLI. The inference model license still applies independently of LikenessForge's MIT code license.
 
 ### 8 GB GPUs
 
@@ -42,7 +42,38 @@ Start with `sd15-inpaint-lowvram`. `sdxl-inpaint` is also usable with model CPU 
 
 FLUX.2 Klein LoRA **training** is a different constraint from inference: the official BFL/Hugging Face guidance puts normal 4B LoRA training around 24 GB VRAM. LikenessForge exposes the official trainer and an offload path, but the SD 1.5/SDXL trainers are the practical local choices on smaller cards.
 
-## Install
+## Start the desktop GUI (recommended)
+
+The repository includes self-bootstrapping launchers. **Python does not need to be installed first.** The launchers install Astral `uv` when necessary, `uv` installs the Python version pinned in `.python-version`, creates/updates the project virtual environment, installs the complete GUI/model dependency set, and then starts `likenessforge-gui`.
+
+Windows, double-click or run:
+
+```powershell
+.\start-gui.ps1
+```
+
+or:
+
+```bat
+start-gui.bat
+```
+
+Linux/macOS:
+
+```bash
+./start-gui.sh
+```
+
+The first start can download Python and Python packages. Model **weights** are deliberately separate: the GUI shows whether each selected segmentation/modifier/trainer model is already cached, and its **Download / install selected model weights** button shows live Hugging Face transfer progress. A model is also downloaded automatically if a workflow needs it and it is not present yet.
+
+The GUI has two primary workflows:
+
+1. **Train likeness LoRA** — select multiple authorised reference photographs, choose the face detector, segmentation model and LoRA trainer, then prepare face-focused training crops and stream the trainer output live. The finished LoRA is automatically placed into the repair workflow.
+2. **Repair photograph** — choose an original image, detect and select the target face when more than one is present, choose the segmentation and modification models, select a compatible LoRA, run the repair, and preview the composited result.
+
+The model panel warns when the selected LoRA trainer and image modifier belong to incompatible architecture families (for example SDXL vs FLUX.2 Klein). Training writes `likenessforge-training.json` alongside its output so a LoRA produced by LikenessForge can be checked again when it is selected for repair.
+
+### Manual install
 
 Core CLI:
 
@@ -50,13 +81,28 @@ Core CLI:
 python -m pip install -e .
 ```
 
-A practical 8 GB setup:
+Desktop GUI only:
 
 ```bash
-python -m pip install -e '.[faces,sam,diffusion,lowvram,training]'
+python -m pip install -e '.[gui]'
+likenessforge-gui
 ```
 
-Use the appropriate PyTorch CUDA wheel/index for your machine before installing the extras when necessary.
+A complete local setup:
+
+```bash
+python -m pip install -e '.[all]'
+```
+
+Or use `uv` directly:
+
+```bash
+uv python install
+uv sync --extra all
+uv run likenessforge-gui
+```
+
+Use the appropriate PyTorch/CUDA configuration for your machine when a non-default wheel/index is required.
 
 ## Inspect plugins and models
 
@@ -194,6 +240,19 @@ debug/20261015T014500Z/
 ```
 
 `trace.json` records the selected plugin/model, face index/coordinates, crop box, resolution, seed, LoRA, modifier options and blend settings.
+
+## Tests and GitHub CI
+
+`.github/workflows/tests.yml` runs on pushes to `main`, pull requests and manual dispatch. It uses the official `astral-sh/setup-uv` action, exercises Python 3.10/3.12/3.13, runs the unit suite and an offscreen Qt GUI smoke test, runs Ruff, validates the Bash and PowerShell launchers, builds wheel/source distributions, and uploads the distributions as a workflow artifact. Model weights are **not** downloaded in CI.
+
+Local equivalent:
+
+```bash
+uv sync --extra gui --extra dev
+QT_QPA_PLATFORM=offscreen uv run pytest -q
+uv run ruff check src tests
+uv build
+```
 
 ## Privacy and responsible use
 

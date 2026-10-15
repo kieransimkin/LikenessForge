@@ -65,6 +65,7 @@ class SD15InpaintModifier(_DiffusersInpaint):
         preferred_size=512,
         low_vram=True,
         license_note="CreativeML OpenRAIL-M; see model card.",
+        lora_family="sd15",
     )
 
 
@@ -76,4 +77,5 @@ class SDXLInpaintModifier(_DiffusersInpaint):
         preferred_size=1024,
         low_vram=True,
         license_note="OpenRAIL++; see model card.",
+        lora_family="sdxl",
     )

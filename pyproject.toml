@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "likenessforge"
-version = "0.1.0"
+version = "0.2.0"
 description = "Modular identity-preserving image repair and LoRA training for the DanceFlow ecosystem."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,9 +17,11 @@ dependencies = [
   "huggingface-hub>=0.30",
   "PyYAML>=6.0",
   "requests>=2.32",
+  "tqdm>=4.66",
 ]
 
 [project.optional-dependencies]
+gui = ["PySide6>=6.8,<7"]
 faces = [
   "opencv-python-headless>=4.10",
   "facenet-pytorch>=2.6",
@@ -57,6 +59,7 @@ training = [
   "tensorboard>=2.18",
 ]
 all = [
+  "PySide6>=6.8,<7",
   "opencv-python-headless>=4.10",
   "facenet-pytorch>=2.6",
   "torch>=2.5",
@@ -69,6 +72,7 @@ all = [
   "safetensors>=0.5",
   "ftfy>=6.2",
   "tensorboard>=2.18",
+  "bitsandbytes>=0.45; platform_system != 'Darwin'",
 ]
 dev = ["pytest>=8", "ruff>=0.9", "build>=1.2", "twine>=6"]
 
@@ -80,6 +84,7 @@ Issues = "https://github.com/kieransimkin/LikenessForge/issues"
 
 [project.scripts]
 likenessforge = "likenessforge.cli:main"
+likenessforge-gui = "likenessforge.gui.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

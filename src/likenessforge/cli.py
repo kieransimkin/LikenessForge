@@ -12,7 +12,7 @@ from likenessforge import __version__
 from likenessforge.config import load_config
 from likenessforge.debug import DebugSink
 from likenessforge.model_store import ModelStore
-from likenessforge.registry import create, describe_plugins, plugin_classes
+from likenessforge.registry import create, describe_plugins
 from likenessforge.workflow import RepairWorkflow, TrainingWorkflow
 
 
@@ -42,6 +42,9 @@ def build_parser():
     p = argparse.ArgumentParser(prog="likenessforge", description="Modular facial-likeness repair and LoRA training")
     p.add_argument("--version", action="version", version=f"LikenessForge {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
+
+    gui = sub.add_parser("gui", help="Launch the optional Qt desktop GUI")
+    _add_common(gui)
 
     plugins = sub.add_parser("plugins", help="List available detector/segmenter/modifier/trainer plugins")
     _add_common(plugins)
@@ -115,6 +118,13 @@ def main(argv=None):
     cfg = load_config(getattr(args, "config", None))
     store = ModelStore(getattr(args, "cache_dir", None) or cfg.cache_dir)
     debug = DebugSink(args.verbose, args.debug_dir)
+
+    if args.command == "gui":
+        try:
+            from likenessforge.gui.app import main as gui_main
+        except ImportError as exc:
+            parser.error(f"GUI dependencies are missing ({exc}); install likenessforge[gui]")
+        return gui_main([])
 
     if args.command == "plugins":
         rows = describe_plugins()

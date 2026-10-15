@@ -16,6 +16,7 @@ class Flux2KleinModifier(ImageModifier):
         preferred_size=1024,
         low_vram=False,
         license_note="Apache-2.0 for the 4B checkpoint.",
+        lora_family="flux2-klein",
     )
 
     def _load(self, low_vram: bool = False):
@@ -101,6 +102,7 @@ class Flux2KleinLowVRAMModifier(Flux2KleinModifier):
         preferred_size=768,
         low_vram=True,
         license_note="Apache-2.0 for the 4B checkpoint.",
+        lora_family="flux2-klein",
     )
 
     def __init__(self, store, **options):

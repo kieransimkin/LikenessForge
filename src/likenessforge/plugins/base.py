@@ -19,6 +19,7 @@ class PluginInfo:
     preferred_size: int | None = None
     low_vram: bool = False
     license_note: str | None = None
+    lora_family: str | None = None
 
 
 class Plugin(ABC):
