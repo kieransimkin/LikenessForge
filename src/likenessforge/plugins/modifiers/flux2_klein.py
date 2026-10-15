@@ -19,6 +19,10 @@ class Flux2KleinModifier(ImageModifier):
     )
 
     def _load(self, low_vram: bool = False):
+        cache_key = bool(low_vram)
+        cache = getattr(self, "_pipeline_cache", {})
+        if cache_key in cache:
+            return cache[cache_key]
         try:
             import torch
             from diffusers import Flux2KleinPipeline
@@ -52,7 +56,9 @@ class Flux2KleinModifier(ImageModifier):
             pipe.enable_model_cpu_offload()
         else:
             pipe.to(device)
-        return pipe, torch, device
+        cache[cache_key] = (pipe, torch, device)
+        self._pipeline_cache = cache
+        return cache[cache_key]
 
     def _wants_low_vram(self):
         mode = self.options.get("low_vram", "off")
@@ -72,14 +78,26 @@ class Flux2KleinModifier(ImageModifier):
                 return False
         return bool(mode)
 
+    def _configure_lora(self, pipe, request) -> None:
+        if not request.lora:
+            return
+        lora_path = self.store.resolve_local_or_hf(request.lora)
+        lora_key = str(lora_path)
+        loaded = getattr(self, "_loaded_lora", {})
+        pipe_key = id(pipe)
+        if loaded.get(pipe_key) != lora_key:
+            LOG.info("loading LoRA: %s", request.lora)
+            if loaded.get(pipe_key) and hasattr(pipe, "unload_lora_weights"):
+                pipe.unload_lora_weights()
+            pipe.load_lora_weights(lora_key, adapter_name="identity")
+            loaded[pipe_key] = lora_key
+            self._loaded_lora = loaded
+        if hasattr(pipe, "set_adapters"):
+            pipe.set_adapters(["identity"], adapter_weights=[float(request.lora_scale)])
+
     def modify(self, request):
         pipe, torch, _device = self._load(low_vram=self._wants_low_vram())
-        if request.lora:
-            LOG.info("loading LoRA: %s", request.lora)
-            lora_path = self.store.resolve_local_or_hf(request.lora)
-            pipe.load_lora_weights(str(lora_path), adapter_name="identity")
-            if hasattr(pipe, "set_adapters"):
-                pipe.set_adapters(["identity"], adapter_weights=[float(request.lora_scale)])
+        self._configure_lora(pipe, request)
         images = [request.image] + list(request.reference_images)
         image_arg = images[0] if len(images) == 1 else images
         generator = torch.Generator(device="cpu").manual_seed(int(request.seed))

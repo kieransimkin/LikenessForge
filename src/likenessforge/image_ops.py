@@ -119,7 +119,14 @@ def composite_crop(
     crop_box: Box,
     feather: int = 32,
     dilate: int = 4,
+    opacity: float = 1.0,
 ) -> Image.Image:
+    """Merge a generated face crop back into the original image.
+
+    ``opacity`` controls how much of the generated result is retained before the
+    feathered face mask is applied. Lower values deliberately preserve more of
+    the original photograph's expression, lighting and skin texture.
+    """
     target_size = (crop_box.width, crop_box.height)
     generated = generated_crop.convert("RGB").resize(target_size, Image.Resampling.LANCZOS)
     mask = crop_mask.convert("L").resize(target_size, Image.Resampling.LANCZOS)
@@ -127,9 +134,57 @@ def composite_crop(
     mask = feather_mask(mask, feather=max(1, int(feather * scale)), dilate=max(0, int(dilate * scale)))
     out = original.convert("RGB").copy()
     base_crop = out.crop(crop_box.as_tuple())
+    opacity = max(0.0, min(1.0, float(opacity)))
+    if opacity < 1.0:
+        generated = Image.blend(base_crop, generated, opacity)
     blended = Image.composite(generated, base_crop, mask)
     out.paste(blended, (crop_box.x1, crop_box.y1))
     return out
+
+
+def comparison_sheet(
+    original: Image.Image,
+    candidates: list[Image.Image],
+    labels: list[str],
+    *,
+    focus_box: Box | None = None,
+    columns: int = 3,
+    tile_size: tuple[int, int] = (360, 360),
+) -> Image.Image:
+    """Build a labelled original-vs-results contact sheet.
+
+    When ``focus_box`` is supplied, each tile shows the same crop around the
+    target face. This makes likeness differences much easier to compare than a
+    full-frame contact sheet for photographs where the face is small.
+    """
+    images = [original.convert("RGB"), *[image.convert("RGB") for image in candidates]]
+    captions = ["ORIGINAL", *labels]
+    if len(captions) != len(images):
+        raise ValueError("labels must contain exactly one entry per candidate")
+
+    tile_w, tile_h = tile_size
+    caption_h = 74
+    columns = max(1, min(int(columns), len(images)))
+    rows = (len(images) + columns - 1) // columns
+    sheet = Image.new("RGB", (columns * tile_w, rows * (tile_h + caption_h)), (24, 24, 24))
+    draw = ImageDraw.Draw(sheet)
+
+    for index, (image, caption) in enumerate(zip(images, captions, strict=True)):
+        if focus_box is not None:
+            image = image.crop(focus_box.as_tuple())
+        fitted = ImageOps.contain(image, (tile_w - 12, tile_h - 12), method=Image.Resampling.LANCZOS)
+        x0 = (index % columns) * tile_w
+        y0 = (index // columns) * (tile_h + caption_h)
+        px = x0 + (tile_w - fitted.width) // 2
+        py = y0 + (tile_h - fitted.height) // 2
+        sheet.paste(fitted, (px, py))
+        draw.rectangle((x0, y0 + tile_h, x0 + tile_w, y0 + tile_h + caption_h), fill=(12, 12, 12))
+        text = caption[:150]
+        # Pillow's default font has no wrapping helper; split approximately by width.
+        line_len = max(24, tile_w // 7)
+        lines = [text[i : i + line_len] for i in range(0, len(text), line_len)][:3]
+        draw.multiline_text((x0 + 8, y0 + tile_h + 7), "\n".join(lines), fill="white", spacing=3)
+    return sheet
 
 
 def annotate_faces(image: Image.Image, faces: list[FaceCandidate]) -> Image.Image:

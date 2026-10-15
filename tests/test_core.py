@@ -7,7 +7,7 @@ from likenessforge.config import load_config
 from likenessforge.debug import DebugSink
 from likenessforge.image_ops import composite_crop, select_face, stable_face_order
 from likenessforge.types import Box, FaceCandidate
-from likenessforge.workflow import RepairWorkflow, TrainingWorkflow
+from likenessforge.workflow import RepairWorkflow, TrainingWorkflow, wizard_variants
 
 
 class DummyInfo:
@@ -116,3 +116,54 @@ def test_training_workflow_accepts_selected_reference_files(tmp_path: Path):
     metadata = (output / "likenessforge-training.json").read_text(encoding="utf-8")
     assert '"lora_family": "dummy"' in metadata
     assert '"prepared_images": 2' in metadata
+
+
+def test_composite_opacity_preserves_original_detail():
+    original = Image.new("RGB", (100, 100), (0, 0, 0))
+    generated = Image.new("RGB", (50, 50), (255, 0, 0))
+    mask = Image.new("L", (50, 50), 255)
+    out = composite_crop(
+        original, generated, mask, Box(25, 25, 75, 75), feather=0, dilate=0, opacity=0.5
+    )
+    pixel = np.asarray(out)[50, 50]
+    assert 120 <= int(pixel[0]) <= 135
+    assert int(pixel[1]) == 0
+
+
+def test_wizard_presets_vary_crop_and_merge_settings():
+    variants = wizard_variants("sdxl-inpaint", "balanced")
+    assert len(variants) == 6
+    assert len({variant.crop_margin for variant in variants}) >= 4
+    assert len({variant.merge_opacity for variant in variants}) >= 4
+    assert len({variant.feather for variant in variants}) >= 4
+    assert all("strength" in variant.options for variant in variants)
+
+    flux = wizard_variants("flux2-klein-4b-lowvram", "quick")
+    assert len(flux) == 4
+    assert all("strength" not in variant.options for variant in flux)
+
+
+def test_repair_wizard_saves_candidates_comparisons_and_manifest(tmp_path: Path):
+    image = Image.new("RGB", (128, 96), (20, 40, 60))
+    workflow = RepairWorkflow(DummyDetector(), DummySegmenter(), DummyModifier(), DebugSink(False))
+    output = tmp_path / "wizard"
+    run = workflow.wizard(
+        image=image,
+        output_dir=output,
+        face_selector=0,
+        lora=None,
+        prompt="repair",
+        negative_prompt=None,
+        preset="quick",
+        seed=10,
+    )
+
+    assert len(run.candidates) == 4
+    assert all(candidate.path.exists() for candidate in run.candidates)
+    assert run.comparison_face_path.exists()
+    assert run.comparison_full_path.exists()
+    assert run.manifest_path.exists()
+    manifest = run.manifest_path.read_text(encoding="utf-8")
+    assert '"crop_margin"' in manifest
+    assert '"merge_opacity"' in manifest
+    assert '"effective_seed"' in manifest

@@ -9,6 +9,9 @@ LOG = logging.getLogger("likenessforge")
 
 class _DiffusersInpaint(ImageModifier):
     def _load(self):
+        cached = getattr(self, "_pipeline_cache", None)
+        if cached is not None:
+            return cached
         try:
             import torch
             from diffusers import AutoPipelineForInpainting
@@ -27,16 +30,26 @@ class _DiffusersInpaint(ImageModifier):
             pipe.enable_vae_slicing()
         if hasattr(pipe, "enable_vae_tiling"):
             pipe.enable_vae_tiling()
-        return pipe, torch, device
+        self._pipeline_cache = (pipe, torch, device)
+        return self._pipeline_cache
+
+    def _configure_lora(self, pipe, request) -> None:
+        if not request.lora:
+            return
+        lora_path = self.store.resolve_local_or_hf(request.lora)
+        lora_key = str(lora_path)
+        if getattr(self, "_loaded_lora", None) != lora_key:
+            LOG.info("loading LoRA: %s", request.lora)
+            if getattr(self, "_loaded_lora", None) and hasattr(pipe, "unload_lora_weights"):
+                pipe.unload_lora_weights()
+            pipe.load_lora_weights(lora_key, adapter_name="identity")
+            self._loaded_lora = lora_key
+        if hasattr(pipe, "set_adapters"):
+            pipe.set_adapters(["identity"], adapter_weights=[float(request.lora_scale)])
 
     def modify(self, request):
         pipe, torch, device = self._load()
-        if request.lora:
-            LOG.info("loading LoRA: %s", request.lora)
-            lora_path = self.store.resolve_local_or_hf(request.lora)
-            pipe.load_lora_weights(str(lora_path), adapter_name="identity")
-            if hasattr(pipe, "set_adapters"):
-                pipe.set_adapters(["identity"], adapter_weights=[request.lora_scale])
+        self._configure_lora(pipe, request)
         gen_device = device if device != "cuda" or not hasattr(pipe, "_execution_device") else pipe._execution_device
         generator = torch.Generator(device=str(gen_device)).manual_seed(int(request.seed))
         kwargs = {

@@ -544,6 +544,145 @@ class RepairTab(QWidget):
         return [Path(self.references.item(i).text()) for i in range(self.references.count())]
 
 
+class RepairWizardTab(QWidget):
+    analyze_requested = Signal()
+    start_requested = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.source = QLineEdit()
+        source_browse = QPushButton("Browse…")
+        source_browse.clicked.connect(self._choose_source)
+        source_row = QHBoxLayout()
+        source_row.addWidget(self.source)
+        source_row.addWidget(source_browse)
+        source_widget = QWidget()
+        source_widget.setLayout(source_row)
+
+        self.output = QLineEdit()
+        output_browse = QPushButton("Browse…")
+        output_browse.clicked.connect(self._choose_output)
+        output_row = QHBoxLayout()
+        output_row.addWidget(self.output)
+        output_row.addWidget(output_browse)
+        output_widget = QWidget()
+        output_widget.setLayout(output_row)
+
+        self.lora = QLineEdit()
+        lora_browse = QPushButton("Browse…")
+        lora_browse.clicked.connect(self._choose_lora)
+        lora_row = QHBoxLayout()
+        lora_row.addWidget(self.lora)
+        lora_row.addWidget(lora_browse)
+        lora_widget = QWidget()
+        lora_widget.setLayout(lora_row)
+
+        self.references = QListWidget()
+        self.references.setMaximumHeight(90)
+        refs_add = QPushButton("Add identity reference…")
+        refs_remove = QPushButton("Remove")
+        refs_add.clicked.connect(self._add_references)
+        refs_remove.clicked.connect(lambda: _remove_selected_items(self.references))
+        refs_row = QHBoxLayout()
+        refs_row.addWidget(refs_add)
+        refs_row.addWidget(refs_remove)
+        refs_row.addStretch(1)
+
+        self.analyze = QPushButton("Detect faces")
+        self.analyze.clicked.connect(self.analyze_requested.emit)
+        self.face = QComboBox()
+        self.face.addItem("Largest face (automatic)", "largest")
+        face_row = QHBoxLayout()
+        face_row.addWidget(self.analyze)
+        face_row.addWidget(QLabel("Face to repair"))
+        face_row.addWidget(self.face, 1)
+
+        self.preset = QComboBox()
+        self.preset.addItem("Quick — 4 useful variations", "quick")
+        self.preset.addItem("Balanced — 6 variations", "balanced")
+        self.preset.addItem("Thorough — 10 variations", "thorough")
+        self.preset.setCurrentIndex(1)
+        self.seed = QSpinBox()
+        self.seed.setRange(0, 2147483647)
+        self.seed.setValue(0)
+
+        form = QFormLayout()
+        form.addRow("Original photograph", source_widget)
+        form.addRow("Results folder", output_widget)
+        form.addRow("Identity LoRA", lora_widget)
+        form.addRow("Sweep size", self.preset)
+        form.addRow("Base seed", self.seed)
+
+        explainer = QLabel(
+            "The wizard automatically varies crop size, identity strength, inference settings and how strongly "
+            "the generated face is blended back into the original. It saves every candidate plus face-focused "
+            "and full-frame comparison sheets."
+        )
+        explainer.setWordWrap(True)
+
+        self.input_preview = ImagePreview("Select an original photograph")
+        self.result_preview = ImagePreview("The original-vs-results comparison will appear here")
+        previews = QHBoxLayout()
+        previews.addWidget(self.input_preview, 1)
+        previews.addWidget(self.result_preview, 1)
+
+        self.start = QPushButton("Run likeness repair wizard")
+        self.start.clicked.connect(self.start_requested.emit)
+        self.status = QLabel("Choose a photograph and LoRA, then run the wizard.")
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.log = QPlainTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setMaximumBlockCount(2000)
+        self.log.setMaximumHeight(170)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(explainer)
+        layout.addLayout(form)
+        layout.addWidget(QLabel("Optional identity reference images (for modifier backends that support them)"))
+        layout.addWidget(self.references)
+        layout.addLayout(refs_row)
+        layout.addLayout(face_row)
+        layout.addLayout(previews, 1)
+        layout.addWidget(self.start)
+        layout.addWidget(self.status)
+        layout.addWidget(self.progress)
+        layout.addWidget(self.log)
+
+    def _choose_source(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Original photograph", "", IMAGE_FILTER)
+        if path:
+            self.source.setText(path)
+            source = Path(path)
+            self.output.setText(str(source.with_name(f"{source.stem}-wizard")))
+            try:
+                self.input_preview.set_pil(Image.open(path).convert("RGB"))
+            except OSError as exc:
+                LOG.warning("unable to preview selected wizard image %s: %s", path, exc)
+
+    def _choose_output(self) -> None:
+        path = QFileDialog.getExistingDirectory(self, "Wizard results directory")
+        if path:
+            self.output.setText(path)
+
+    def _choose_lora(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Identity LoRA", "", "LoRA weights (*.safetensors);;All files (*)")
+        if path:
+            self.lora.setText(path)
+
+    def _add_references(self) -> None:
+        files, _ = QFileDialog.getOpenFileNames(self, "Identity reference images", "", IMAGE_FILTER)
+        existing = {self.references.item(i).text() for i in range(self.references.count())}
+        for path in files:
+            if path not in existing:
+                self.references.addItem(path)
+                existing.add(path)
+
+    def reference_paths(self) -> list[Path]:
+        return [Path(self.references.item(i).text()) for i in range(self.references.count())]
+
+
 class LikenessForgeWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -557,8 +696,10 @@ class LikenessForgeWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.training = TrainingTab()
         self.repair = RepairTab()
+        self.wizard = RepairWizardTab()
         self.tabs.addTab(self.training, "Train likeness LoRA")
         self.tabs.addTab(self.repair, "Repair photograph")
+        self.tabs.addTab(self.wizard, "Repair wizard")
         layout.addWidget(self.models)
         layout.addWidget(self.tabs, 1)
         self.setCentralWidget(root)
@@ -567,6 +708,8 @@ class LikenessForgeWindow(QMainWindow):
         self.training.start_requested.connect(self.start_training)
         self.repair.analyze_requested.connect(self.analyze_faces)
         self.repair.repair_requested.connect(self.start_repair)
+        self.wizard.analyze_requested.connect(self.analyze_wizard_faces)
+        self.wizard.start_requested.connect(self.start_wizard)
 
     def _start_worker(self, function, on_result=None, on_error=None, message_target=None) -> TaskThread:
         worker = TaskThread(function, self)
@@ -683,6 +826,7 @@ class LikenessForgeWindow(QMainWindow):
             self.training.status.setText(f"Training complete: {weights}")
             self.training.log.appendPlainText(f"LoRA ready: {weights}")
             self.repair.lora.setText(str(weights))
+            self.wizard.lora.setText(str(weights))
             self.tabs.setCurrentWidget(self.repair)
 
         def failed(text):
@@ -845,6 +989,145 @@ class LikenessForgeWindow(QMainWindow):
             self._show_error(text)
 
         self._start_worker(task, done, failed, self.repair.log)
+
+
+    def analyze_wizard_faces(self) -> None:
+        source = Path(self.wizard.source.text()).expanduser() if self.wizard.source.text() else None
+        if source is None or not source.is_file():
+            QMessageBox.warning(self, "Original photograph", "Choose an existing photograph first.")
+            return
+        detector_name = self.models.selected("detector")
+        self.wizard.analyze.setEnabled(False)
+        self.wizard.status.setText("Detecting faces…")
+
+        def task(worker: TaskThread):
+            store = ModelStore(progress_callback=worker.model_event.emit)
+            detector = create("detector", detector_name, store)
+            image = Image.open(source).convert("RGB")
+            workflow = RepairWorkflow(detector, None, None, DebugSink(False, event_callback=self._debug_callback(worker)))
+            faces = workflow.inspect_faces(image)
+            return faces, annotate_faces(image, faces)
+
+        def done(result):
+            faces, preview = result
+            self.wizard.analyze.setEnabled(True)
+            self.wizard.face.clear()
+            self.wizard.face.addItem("Largest face (automatic)", "largest")
+            for face in faces:
+                self.wizard.face.addItem(
+                    f"Face {face.index} — score {face.score:.3f} — {face.box.width}×{face.box.height}",
+                    face.index,
+                )
+            self.wizard.input_preview.set_pil(preview)
+            self.wizard.status.setText(
+                f"Found {len(faces)} face(s). Choose one, or leave 'Largest face' selected."
+                if faces
+                else "No faces detected."
+            )
+
+        def failed(text):
+            self.wizard.analyze.setEnabled(True)
+            self.wizard.status.setText("Face detection failed")
+            self._show_error(text)
+
+        self._start_worker(task, done, failed, self.wizard.log)
+
+    def _warn_wizard_lora_mismatch(self) -> bool:
+        path = self.wizard.lora.text().strip()
+        if not path:
+            return True
+        metadata = _load_training_metadata(path)
+        if not metadata:
+            return True
+        expected = plugin_classes("modifier")[self.models.selected("modifier")].info.lora_family
+        actual = metadata.get("lora_family")
+        if expected and actual and expected != actual:
+            answer = QMessageBox.warning(
+                self,
+                "LoRA family mismatch",
+                f"This LoRA was trained for {actual}, but the selected modifier expects {expected}. "
+                "The weights are not architecture-compatible. Continue anyway?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            return answer == QMessageBox.Yes
+        return True
+
+    def start_wizard(self) -> None:
+        source = Path(self.wizard.source.text()).expanduser() if self.wizard.source.text() else None
+        output = Path(self.wizard.output.text()).expanduser() if self.wizard.output.text() else None
+        if source is None or not source.is_file():
+            QMessageBox.warning(self, "Original photograph", "Choose an existing photograph first.")
+            return
+        if output is None:
+            QMessageBox.warning(self, "Results folder", "Choose a results folder.")
+            return
+        if not self._warn_wizard_lora_mismatch():
+            return
+
+        detector_name = self.models.selected("detector")
+        segmenter_name = self.models.selected("segmenter")
+        modifier_name = self.models.selected("modifier")
+        low_vram = self.models.low_vram.currentText()
+        face_selector = self.wizard.face.currentData(Qt.UserRole)
+        if face_selector is None:
+            face_selector = "largest"
+        references = self.wizard.reference_paths()
+        lora = self.wizard.lora.text().strip() or None
+        preset = str(self.wizard.preset.currentData(Qt.UserRole) or "balanced")
+        seed = self.wizard.seed.value()
+        cfg = ForgeConfig()
+
+        self.wizard.start.setEnabled(False)
+        self.wizard.progress.setRange(0, 0)
+        self.wizard.status.setText("Running repair variations…")
+        self.wizard.log.clear()
+
+        def task(worker: TaskThread):
+            store = ModelStore(progress_callback=worker.model_event.emit)
+            detector = create("detector", detector_name, store)
+            segmenter = create("segmenter", segmenter_name, store)
+            modifier = create("modifier", modifier_name, store, low_vram=low_vram)
+            image = Image.open(source).convert("RGB")
+            refs = [Image.open(path).convert("RGB") for path in references]
+            debug = DebugSink(False, event_callback=self._debug_callback(worker))
+            workflow = RepairWorkflow(detector, segmenter, modifier, debug)
+
+            def progress(index, total, label):
+                worker.report(f"Variant {index}/{total}: {label}")
+
+            return workflow.wizard(
+                image=image,
+                output_dir=output,
+                face_selector=face_selector,
+                lora=lora,
+                prompt=cfg.prompt,
+                negative_prompt=cfg.negative_prompt,
+                preset=preset,
+                seed=seed,
+                reference_images=refs,
+                progress=progress,
+            )
+
+        def done(run):
+            self.wizard.start.setEnabled(True)
+            self.wizard.progress.setRange(0, 100)
+            self.wizard.progress.setValue(100)
+            self.wizard.status.setText(f"Wizard complete: {run.output_dir}")
+            self.wizard.result_preview.set_pil(run.comparison_face)
+            self.wizard.log.appendPlainText(f"Face comparison: {run.comparison_face_path}")
+            self.wizard.log.appendPlainText(f"Full comparison: {run.comparison_full_path}")
+            self.wizard.log.appendPlainText(f"Settings manifest: {run.manifest_path}")
+
+        def failed(text):
+            self.wizard.start.setEnabled(True)
+            self.wizard.progress.setRange(0, 100)
+            self.wizard.progress.setValue(0)
+            self.wizard.status.setText("Wizard failed")
+            self.wizard.log.appendPlainText(text)
+            self._show_error(text)
+
+        self._start_worker(task, done, failed, self.wizard.log)
 
 
 def main(argv=None) -> int:

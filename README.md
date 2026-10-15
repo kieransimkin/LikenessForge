@@ -93,10 +93,11 @@ Linux/macOS:
 
 The first start can download Python and Python packages. Model **weights** are deliberately separate: the GUI shows whether each selected segmentation/modifier/trainer model is already cached, and its **Download / install selected model weights** button shows live Hugging Face transfer progress. A model is also downloaded automatically if a workflow needs it and it is not present yet.
 
-The GUI has two primary workflows:
+The GUI has three primary workflows:
 
-1. **Train likeness LoRA** — select multiple authorised reference photographs, choose the face detector, segmentation model and LoRA trainer, then prepare face-focused training crops and stream the trainer output live. The finished LoRA is automatically placed into the repair workflow.
-2. **Repair photograph** — choose an original image, detect and select the target face when more than one is present, choose the segmentation and modification models, select a compatible LoRA, run the repair, and preview the composited result.
+1. **Train likeness LoRA** — select multiple authorised reference photographs, choose the face detector, segmentation model and LoRA trainer, then prepare face-focused training crops and stream the trainer output live. The finished LoRA is automatically placed into the repair workflows.
+2. **Repair photograph** — expert/single-run mode: choose an original image, detect and select the target face, tune the inference and blend settings directly, run the repair, and preview the composited result.
+3. **Repair wizard** — simplified mode: choose the original photograph, identity LoRA, optional identity references and a Quick/Balanced/Thorough sweep. LikenessForge automatically tries several crop sizes, LoRA strengths, seeds, model settings, mask feather/dilation values and generated-vs-original merge opacities, then saves every candidate and produces labelled original-vs-results comparison sheets.
 
 The OpenCV YuNet detector downloads its tiny ONNX weights from the official OpenCV Hugging Face repository on first use. The legacy `mtcnn` plugin name remains as a deprecated compatibility alias; LikenessForge no longer depends on `facenet-pytorch`, avoiding its obsolete Torch/Torchvision pins.
 
@@ -191,6 +192,42 @@ likenessforge repair input.png repaired.png \
 ```
 
 The `--reference` option is repeatable for modifier backends that support multiple references.
+
+## Repair wizard
+
+For cases where you do not know which crop/inference/merge settings will preserve the photograph while improving identity, use the wizard instead of hand-tuning a single run:
+
+```bash
+likenessforge repair-wizard input.png ./wizard-results \
+  --detector opencv-yunet \
+  --segmenter sam2-tiny \
+  --modifier sd15-inpaint-lowvram \
+  --face largest \
+  --lora ./loras/person.safetensors \
+  --preset balanced
+```
+
+The sweep is deliberately bounded rather than a brute-force Cartesian product:
+
+- **Quick:** 4 representative variants.
+- **Balanced:** 6 variants covering tight/wide crops, natural/strong identity, and original-preserving merges.
+- **Thorough:** 10 variants including wider crop/merge extremes and alternate seeds.
+
+For SD 1.5/SDXL inpainting, variants change crop margin, inpaint strength, guidance, step count, LoRA scale, seed, mask feather/dilation and merge opacity. FLUX.2 Klein sweeps the equivalent supported settings without inpaint strength. Lower merge opacity deliberately blends more of the original face texture/expression back into the generated result.
+
+The output directory contains:
+
+```text
+wizard-results/
+  candidate-01-tight-natural.png
+  candidate-02-balanced.png
+  ...
+  comparison-face.png   # same face-context crop for original + every result
+  comparison-full.png   # full-photo original + every result
+  wizard-results.json   # exact settings/seed used for every candidate
+```
+
+The desktop **Repair wizard** tab previews `comparison-face.png` when the sweep finishes, making it easy to compare likeness against the original before choosing a candidate.
 
 ## Train a LoRA
 

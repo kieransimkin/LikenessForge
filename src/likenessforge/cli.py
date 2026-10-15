@@ -81,6 +81,22 @@ def build_parser():
     repair.add_argument("--strength", type=float)
     repair.add_argument("--low-vram", choices=["auto", "off", "cpu_offload", "bnb4"], default=None)
 
+    wizard = sub.add_parser("repair-wizard", help="Try a guided set of repair settings and build comparison sheets")
+    _add_common(wizard)
+    wizard.add_argument("image")
+    wizard.add_argument("output", help="Directory for wizard candidates and comparison sheets")
+    wizard.add_argument("--detector")
+    wizard.add_argument("--segmenter")
+    wizard.add_argument("--modifier")
+    wizard.add_argument("--face", default="largest", help="Face index from `faces`, or 'largest'")
+    wizard.add_argument("--lora", help="Local LoRA path or Hugging Face LoRA repo")
+    wizard.add_argument("--reference", action="append", default=[], help="Optional identity reference image (repeatable)")
+    wizard.add_argument("--preset", choices=["quick", "balanced", "thorough"], default="balanced")
+    wizard.add_argument("--seed", type=int, default=0)
+    wizard.add_argument("--prompt")
+    wizard.add_argument("--negative-prompt")
+    wizard.add_argument("--low-vram", choices=["auto", "off", "cpu_offload", "bnb4"], default=None)
+
     train = sub.add_parser("train-lora", help="Crop/segment a face dataset and train a LoRA")
     _add_common(train)
     train.add_argument("images", help="Directory of authorised training images")
@@ -151,7 +167,11 @@ def main(argv=None):
         print(path)
         return 0
 
-    detector = _plugin(args, cfg, store, "detector") if args.command in {"faces", "repair", "train-lora", "prepare-training"} else None
+    detector = (
+        _plugin(args, cfg, store, "detector")
+        if args.command in {"faces", "repair", "repair-wizard", "train-lora", "prepare-training"}
+        else None
+    )
 
     if args.command == "faces":
         image = Image.open(args.image).convert("RGB")
@@ -190,6 +210,34 @@ def main(argv=None):
         print(args.output)
         if debug.root:
             print(f"debug: {debug.root}")
+        return 0
+
+    if args.command == "repair-wizard":
+        segmenter = _plugin(args, cfg, store, "segmenter")
+        modifier = _plugin(args, cfg, store, "modifier")
+        image = Image.open(args.image).convert("RGB")
+        refs = [Image.open(p).convert("RGB") for p in args.reference]
+        output_dir = Path(args.output)
+        workflow = RepairWorkflow(detector, segmenter, modifier, debug)
+
+        def progress(index, total, label):
+            print(f"[{index}/{total}] {label}")
+
+        run = workflow.wizard(
+            image=image,
+            output_dir=output_dir,
+            face_selector=args.face,
+            lora=args.lora,
+            prompt=args.prompt or cfg.prompt,
+            negative_prompt=args.negative_prompt or cfg.negative_prompt,
+            preset=args.preset,
+            seed=args.seed,
+            reference_images=refs,
+            progress=progress,
+        )
+        print(run.comparison_face_path)
+        print(run.comparison_full_path)
+        print(run.manifest_path)
         return 0
 
     if args.command in {"train-lora", "prepare-training"}:

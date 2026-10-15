@@ -17,9 +17,11 @@ def test_gui_exposes_model_and_workflow_controls():
         assert window.models.segmenter.count() >= 2
         assert window.models.modifier.count() >= 3
         assert window.models.trainer.count() >= 3
-        assert window.tabs.count() == 2
+        assert window.tabs.count() == 3
         assert window.tabs.tabText(0) == "Train likeness LoRA"
         assert window.tabs.tabText(1) == "Repair photograph"
+        assert window.tabs.tabText(2) == "Repair wizard"
+        assert window.wizard.preset.count() == 3
     finally:
         window.close()
         app.processEvents()
