@@ -9,3 +9,11 @@
 - Every feature change must update README.md and add/adjust tests. GUI tests should use `QT_QPA_PLATFORM=offscreen` and must not download model weights. Keep the uv bootstrap launchers working without a preinstalled Python.
 - The verbose trace is a compatibility feature: it should continue to expose each stage and save every intermediate image when enabled. GUI live logging is additive to this persisted trace.
 - Website: https://kieransimkin.co.uk/danceflow/
+
+## Marketing, documentation and handoff
+
+- Keep README.md and package metadata current for every capability, command, default or integration change. Lead with the user benefit, shortest setup path, supported environments and material current limitations; do not copy internal incident histories into adopter-facing copy.
+- Include canonical website and repository/contribution links in README and supported metadata fields. Keep discoverability phrases truthful; local phrase counts are not external search demand. Avoid guaranteed likeness or universal VRAM claims.
+- Inspect capabilities fully and identify a concrete reusable improvement where justified; use the existing plugin/workflow owners. Submit improvements with documentation, synthetic tests and a reproducible example to https://github.com/kieransimkin/LikenessForge/pulls. See CONTRIBUTING.md for checks and privacy requirements.
+- Keep DanceFlow membership and explicit file handoffs distinct from implemented automatic integrations. Preserve canonical artwork, private reference/LoRA provenance and human review of each candidate; preparing a repair does not approve public use.
+- Validate built wheel/source metadata, links, source/version identity and private-file exclusions before publishing a fresh matching immutable release. Verify each configured registry separately; do not infer a registry listing from GitHub.

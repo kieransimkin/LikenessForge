@@ -70,7 +70,7 @@ class _DiffusersInpaint(ImageModifier):
 class SD15InpaintModifier(_DiffusersInpaint):
     info = PluginInfo(
         name="sd15-inpaint-lowvram",
-        description="Stable Diffusion 1.5 inpainting; lightest supported modifier and the safest 8 GB baseline.",
+        description="Stable Diffusion 1.5 inpainting with CPU offload; a hardware-dependent lower-memory starting point.",
         model_id="stable-diffusion-v1-5/stable-diffusion-inpainting",
         preferred_size=512,
         low_vram=True,

@@ -20,6 +20,7 @@ def test_gui_exposes_model_and_workflow_controls():
     app = QApplication.instance() or QApplication([])
     window = LikenessForgeWindow()
     try:
+        assert not window.windowIcon().isNull()
         assert window.models.segmenter.count() >= 2
         assert window.models.modifier.count() >= 3
         assert window.models.trainer.count() >= 3

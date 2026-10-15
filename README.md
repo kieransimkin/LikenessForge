@@ -1,8 +1,22 @@
 # LikenessForge
 
-**Identity-preserving image repair for the DanceFlow ecosystem.**
+![LikenessForge logo](docs/branding/logo.svg)
+
+**Repair facial likeness while keeping the composition you chose.**
+
+By [Kieran Simkin](https://kieransimkin.co.uk/) Â· Part of [DanceFlow](https://kieransimkin.co.uk/danceflow/) Â· [Kieran's music](https://kieransimkin.co.uk/my-songs/)
+
+Use a local CLI or desktop GUI to select a face, apply an identity LoRA, and compare reviewable repairs without replacing the whole image. Training and repair wizards retain comparison sheets and settings so you can choose a candidate deliberately. Results depend on references, model and settings; likeness quality requires human review.
 
 LikenessForge is a local-first, modular CLI **and desktop GUI** for taking an existing image whose composition is already right and repairing the facial likeness of a selected person using an identity LoRA. Face detection, face segmentation, image modification and LoRA training are independent plugin families, so the pipeline can evolve as smaller image models improve.
+
+The [family logo](docs/branding/README.md) also identifies the desktop window.
+
+## Requirements and scope
+
+Python 3.10 or later is required for manual installation; the desktop launchers bootstrap the pinned Python automatically. Qt is optional for CLI use. Model-backed operations need the selected extras, model downloads and suitable memory, GPU/runtime or CPU-offload support. The code is MIT-licensed; downloaded models retain separate terms. Install from this repository or a verified GitHub release; this README does not imply availability on a package registry.
+
+LikenessForge prepares still-image candidates. RasterMoves handles general upscaling, PixelCue handles media tagging, and DanceMoves handles web motion. Files may be passed between these tools through explicit reviewed handoffs; no automatic integration or identity-verification service is implied. See the [DanceFlow workflow](docs/DANCEFLOW.md).
 
 ## What it does
 
@@ -27,7 +41,7 @@ The core repair workflow is:
 | detector | `mtcnn` | compatibility alias for `opencv-yunet` | deprecated name retained for old configs |
 | segmenter | `soft-face` | none | fast elliptical mask fallback |
 | segmenter | `sam2-tiny` | `facebook/sam2.1-hiera-tiny` | learned promptable segmentation |
-| modifier | `sd15-inpaint-lowvram` | `stable-diffusion-v1-5/stable-diffusion-inpainting` | **8 GB-safe baseline**, 512px |
+| modifier | `sd15-inpaint-lowvram` | `stable-diffusion-v1-5/stable-diffusion-inpainting` | **lower-memory starting point**, 512px |
 | modifier | `sdxl-inpaint` | `diffusers/stable-diffusion-xl-1.0-inpainting-0.1` | better fidelity/detail; CPU offload supported |
 | modifier | `flux2-klein-4b` | `black-forest-labs/FLUX.2-klein-4B` | unified generation/editing + LoRAs |
 | modifier | `flux2-klein-4b-lowvram` | same | 4-bit quantization when supported + CPU offload |
@@ -65,7 +79,7 @@ Older LikenessForge versions used the Windows platform cache. To remove both the
 
 ### 8 GB GPUs
 
-Start with `sd15-inpaint-lowvram`. `sdxl-inpaint` is also usable with model CPU offload and VAE tiling, although it is slower. `flux2-klein-4b-lowvram` requests bitsandbytes 4-bit quantisation of the transformer/text encoder and CPU offload; exact support depends on GPU/CUDA/bitsandbytes versions. BFL also publishes FP8/NVFP4 Klein weights, but those are hardware/runtime-specific and are intentionally not silently substituted by the generic plugin.
+Start with `sd15-inpaint-lowvram`; the low-VRAM label is a configuration, not a guarantee that every workload fits an 8 GB card. `sdxl-inpaint` is also usable with model CPU offload and VAE tiling, although it is slower. `flux2-klein-4b-lowvram` requests bitsandbytes 4-bit quantisation of the transformer/text encoder and CPU offload; exact support depends on GPU/CUDA/bitsandbytes versions. BFL also publishes FP8/NVFP4 Klein weights, but those are hardware/runtime-specific and are intentionally not silently substituted by the generic plugin.
 
 FLUX.2 Klein LoRA **training** is a different constraint from inference: the official BFL/Hugging Face guidance puts normal 4B LoRA training around 24 GB VRAM. LikenessForge exposes the official trainer and an offload path, but the SD 1.5/SDXL trainers are the practical local choices on smaller cards.
 
@@ -364,10 +378,18 @@ Local equivalent:
 ```bash
 uv sync --extra gui --extra dev
 QT_QPA_PLATFORM=offscreen uv run pytest -q
-uv run ruff check src tests
+uv run ruff check src tests scripts
 uv build
+uv run twine check --strict dist/*.whl dist/*.tar.gz
+uv run python scripts/validate_distribution.py dist
 ```
 
 ## Privacy and responsible use
 
-Training images and LoRA weights remain local unless an underlying model repository must be downloaded. Do not commit private portraits or trained identity weights. Use likeness repair and identity training only on images/identities you are authorised to work with, and respect the licence/usage terms of every downloaded model.
+The supplied workflows process images locally; first-use model/helper downloads contact their upstream sources. Custom plugins may have different data handling. Verbose debug directories can contain complete portraits and local paths: review them before sharing. Do not commit private portraits or trained identity weights. Use likeness repair and identity training only on images/identities you are authorised to work with, and respect the licence/usage terms of every downloaded model.
+
+## Contribute
+
+People and agents are welcome to inspect the available capabilities and suggest useful improvements. Reuse the plugin/workflow interfaces, reproduce a concrete gap, update README.md, add meaningful synthetic tests and a runnable example, then submit a [pull request to LikenessForge](https://github.com/kieransimkin/LikenessForge/pulls). Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) first. Explain why no worthwhile change is needed when the existing tool already meets the task.
+
+Tagged releases run the test/build workflow before publishing immutable wheel/source distributions and SHA-256 checksums to GitHub. Package-registry publication is separate and is not claimed by a GitHub release. No model weights, trained identity LoRAs or private examples are distributed.

@@ -1,15 +1,25 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "likenessforge"
-version = "0.4.1"
-description = "Modular identity-preserving image repair and LoRA training for the DanceFlow ecosystem."
+version = "0.4.2"
+description = "Local facial-likeness repair and identity LoRA training. https://kieransimkin.co.uk/danceflow/"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{name = "Kieran Simkin"}]
+keywords = ["DanceFlow", "facial-likeness", "image-repair", "inpainting", "LoRA", "desktop-gui"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: End Users/Desktop",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Topic :: Multimedia :: Graphics :: Graphics Conversion",
+]
 dependencies = [
   "numpy>=1.24,<3",
   "Pillow>=10.4",
@@ -78,6 +88,9 @@ Homepage = "https://kieransimkin.co.uk/"
 "DanceFlow ecosystem" = "https://kieransimkin.co.uk/danceflow/"
 Repository = "https://github.com/kieransimkin/LikenessForge"
 Issues = "https://github.com/kieransimkin/LikenessForge/issues"
+Documentation = "https://github.com/kieransimkin/LikenessForge#readme"
+Changelog = "https://github.com/kieransimkin/LikenessForge/releases"
+"Kieran Simkin music" = "https://kieransimkin.co.uk/my-songs/"
 
 [project.scripts]
 likenessforge = "likenessforge.cli:main"
@@ -87,7 +100,7 @@ likenessforge-gui = "likenessforge.gui.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-likenessforge = ["py.typed"]
+likenessforge = ["py.typed", "assets/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
