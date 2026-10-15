@@ -380,7 +380,7 @@ uv sync --extra gui --extra dev
 QT_QPA_PLATFORM=offscreen uv run pytest -q
 uv run ruff check src tests scripts
 uv build
-uv run twine check --strict dist/*
+uv run twine check --strict dist/*.whl dist/*.tar.gz
 uv run python scripts/validate_distribution.py dist
 ```
 

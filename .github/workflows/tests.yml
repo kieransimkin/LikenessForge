@@ -107,7 +107,7 @@ jobs:
 
       - name: Validate actual distribution metadata and release identity
         run: |
-          uvx twine check --strict dist/*
+          uvx twine check --strict dist/*.whl dist/*.tar.gz
           python scripts/package_release.py
           python - <<'PY'
           import json, os
