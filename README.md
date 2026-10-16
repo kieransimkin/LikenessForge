@@ -136,6 +136,13 @@ Every GUI file input supports both normal file-picker buttons and drag-and-drop 
 
 The OpenCV YuNet detector downloads its tiny ONNX weights from the official OpenCV Hugging Face repository on first use. The legacy `mtcnn` plugin name remains as a deprecated compatibility alias; LikenessForge no longer depends on `facenet-pytorch`, avoiding its obsolete Torch/Torchvision pins.
 
+YuNet detection uses an aspect-preserving input bounded to 640 pixels on its
+longest side, improving detection of large faces in camera-resolution photographs.
+Face boxes and landmarks are mapped back to the untouched original resolution;
+training crops and repaired outputs retain their normal source coordinates.
+Set the detector option `max_input_size: 0` to use native-resolution detection,
+or choose another positive bound for a particular image set.
+
 The model panel warns when the selected LoRA trainer and image modifier belong to incompatible architecture families (for example SDXL vs FLUX.2 Klein). Training writes `likenessforge-training.json` alongside its output so a LoRA produced by LikenessForge can be checked again when it is selected for repair.
 
 ### Manual install

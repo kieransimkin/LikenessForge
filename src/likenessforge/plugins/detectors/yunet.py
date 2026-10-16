@@ -32,6 +32,14 @@ class OpenCVYuNetDetector(FaceDetector):
         rgb = np.asarray(image.convert("RGB"))
         bgr = np.ascontiguousarray(rgb[:, :, ::-1])
         height, width = bgr.shape[:2]
+        # YuNet can miss very large faces at native camera resolution. Bound
+        # inference size, then return coordinates in the unchanged source image.
+        maximum = int(self.options.get("max_input_size", 640))
+        scale = min(1.0, maximum / max(width, height)) if maximum > 0 else 1.0
+        input_width, input_height = max(1, round(width * scale)), max(1, round(height * scale))
+        if (input_width, input_height) != (width, height):
+            bgr = cv2.resize(bgr, (input_width, input_height), interpolation=cv2.INTER_AREA)
+        scale_x, scale_y = width / input_width, height / input_height
 
         score_threshold = float(self.options.get("score_threshold", 0.75))
         nms_threshold = float(self.options.get("nms_threshold", 0.3))
@@ -41,12 +49,12 @@ class OpenCVYuNetDetector(FaceDetector):
         detector = cv2.FaceDetectorYN.create(
             str(model_path),
             "",
-            (width, height),
+            (input_width, input_height),
             score_threshold,
             nms_threshold,
             top_k,
         )
-        detector.setInputSize((width, height))
+        detector.setInputSize((input_width, input_height))
         _, detections = detector.detect(bgr)
         if detections is None:
             return []
@@ -54,11 +62,13 @@ class OpenCVYuNetDetector(FaceDetector):
         faces = []
         for raw in detections:
             x, y, w, h = [float(v) for v in raw[:4]]
+            x, w = x * scale_x, w * scale_x
+            y, h = y * scale_y, h * scale_y
             if w < min_face_size or h < min_face_size:
                 continue
             x1, y1 = round(x), round(y)
             x2, y2 = round(x + w), round(y + h)
-            landmarks = [(float(raw[i]), float(raw[i + 1])) for i in range(4, 14, 2)]
+            landmarks = [(float(raw[i]) * scale_x, float(raw[i + 1]) * scale_y) for i in range(4, 14, 2)]
             score = float(raw[14])
             faces.append(
                 FaceCandidate(
