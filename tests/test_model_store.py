@@ -1,7 +1,51 @@
+from fnmatch import fnmatch
 from pathlib import Path
 
+import pytest
+
 from likenessforge import model_store
-from likenessforge.model_store import ModelStore
+from likenessforge.model_store import ModelStore, diffusers_snapshot_files
+
+
+def test_diffusers_snapshot_selects_one_pipeline_representation(monkeypatch, tmp_path):
+    captured = {}
+    store = ModelStore(project_root=tmp_path)
+
+    def download(repo_id, **kwargs):
+        captured.update(repo_id=repo_id, **kwargs)
+        return tmp_path / "snapshot"
+
+    monkeypatch.setattr(store, "ensure_hf_snapshot", download)
+    monkeypatch.setattr(model_store, "list_repo_files", lambda *args, **kwargs: [
+        "model_index.json", "unet/config.json", "unet/diffusion_pytorch_model.safetensors",
+        "text_encoder/model-00001-of-00002.safetensors", "tokenizer/vocab.json", "LICENSE",
+        "model.ckpt", "v1-5.safetensors", "unet/diffusion_pytorch_model.bin",
+        "unet/diffusion_pytorch_model.fp16.safetensors", "onnx/model.onnx",
+    ])
+    assert store.ensure_diffusers_snapshot("example/model", revision="immutable") == tmp_path / "snapshot"
+    assert captured["revision"] == "immutable"
+    patterns = captured["allow_patterns"]
+    for path in ("model_index.json", "unet/config.json", "unet/diffusion_pytorch_model.safetensors",
+                 "text_encoder/model-00001-of-00002.safetensors", "tokenizer/vocab.json", "LICENSE"):
+        assert any(fnmatch(path, pattern) for pattern in patterns), path
+    for path in ("model.ckpt", "v1-5.safetensors", "unet/diffusion_pytorch_model.bin",
+                 "unet/diffusion_pytorch_model.fp16.safetensors", "onnx/model.onnx"):
+        assert not any(fnmatch(path, pattern) for pattern in patterns), path
+
+
+def test_snapshot_selects_safetensors_or_binary_once_per_component():
+    files = ["unet/diffusion_pytorch_model.safetensors", "unet/diffusion_pytorch_model.bin",
+             "vae/diffusion_pytorch_model.bin", "vae/diffusion_pytorch_model.fp16.bin"]
+    assert diffusers_snapshot_files(files) == [files[0], files[2]]
+
+
+def test_snapshot_precision_variant_is_explicit_and_keeps_shard_index():
+    files = ["unet/diffusion_pytorch_model.fp16.safetensors",
+             "unet/diffusion_pytorch_model.bin", "text_encoder/model.fp16.safetensors.index.json",
+             "text_encoder/model.fp16-00001-of-00002.safetensors"]
+    assert diffusers_snapshot_files(files, "fp16") == sorted([files[0], files[2], files[3]])
+    with pytest.raises(ValueError, match="No compatible"):
+        diffusers_snapshot_files(["model_index.json", "unet/config.json"])
 
 
 def test_model_store_emits_download_progress(monkeypatch, tmp_path: Path):

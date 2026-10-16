@@ -54,6 +54,26 @@ Model files are downloaded on first use into the repository-local `models/` dire
 
 ### Model storage and cleanup
 
+![Illustration of selected pipeline components, private project-local models storage and local training](docs/model-storage.svg)
+
+Storage illustration for the Stable Diffusion training/inpainting route. This is
+an explanatory diagram, not a screenshot or evidence of a completed training.
+
+Stable Diffusion training and inpainting select one weight representation per
+pipeline component: safetensors where available, otherwise the upstream binary
+weights. CUDA inpainting selects the FP16 variant by default; CPU and training
+use standard weights. Configuration, tokenizers and licence files are retained. Full standalone
+checkpoints, duplicate precision variants and unrelated export formats are not
+downloaded. Trainers use the exact resolved local snapshot and retain at most one
+resume checkpoint by default. Training logs stay local (`--report_to none`);
+deliberate trainer overrides remain available through `--extra-arg`.
+
+Set `LIKENESSFORGE_PROJECT_ROOT` to the owning project before starting an installed
+wheel. Keep `HF_HOME`, `HF_HUB_CACHE`, `HF_XET_CACHE`, `TORCH_HOME` and any compiler
+caches beneath that project's `models/` directory too. Keep private prepared
+training data, LoRAs, validation images and traces beneath that same ignored root.
+Existing external caches are not moved or deleted automatically.
+
 LikenessForge deliberately keeps model assets with the project rather than in a hidden OS cache:
 
 ```text
@@ -117,6 +137,13 @@ The GUI has four primary workflows:
 Every GUI file input supports both normal file-picker buttons and drag-and-drop from Explorer/Finder/the desktop. Training-reference and identity-reference lists accept multiple images at once; original/validation photograph and LoRA fields are dedicated single-file drop targets. You can also drop files onto the active workflow tab/window: repair workflows automatically route a LoRA file to the LoRA field and use the first image as the source when it is empty, while the training workflows route image batches to their reference lists (a single image on an empty Training Wizard is treated as its validation photograph). Unsupported file types are ignored.
 
 The OpenCV YuNet detector downloads its tiny ONNX weights from the official OpenCV Hugging Face repository on first use. The legacy `mtcnn` plugin name remains as a deprecated compatibility alias; LikenessForge no longer depends on `facenet-pytorch`, avoiding its obsolete Torch/Torchvision pins.
+
+YuNet detection uses an aspect-preserving input bounded to 640 pixels on its
+longest side, improving detection of large faces in camera-resolution photographs.
+Face boxes and landmarks are mapped back to the untouched original resolution;
+training crops and repaired outputs retain their normal source coordinates.
+Set the detector option `max_input_size: 0` to use native-resolution detection,
+or choose another positive bound for a particular image set.
 
 The model panel warns when the selected LoRA trainer and image modifier belong to incompatible architecture families (for example SDXL vs FLUX.2 Klein). Training writes `likenessforge-training.json` alongside its output so a LoRA produced by LikenessForge can be checked again when it is selected for repair.
 
