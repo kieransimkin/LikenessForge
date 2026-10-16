@@ -20,6 +20,12 @@ class _DiffusersScriptTrainer(LoraTrainer):
     script_name: str
     base_model_id: str
 
+    def prepare_model(self):
+        return self.store.ensure_diffusers_snapshot(self.base_model_id, revision=self.options.get("revision"))
+
+    def is_model_cached(self):
+        return self.store.is_diffusers_snapshot_cached(self.base_model_id, revision=self.options.get("revision"))
+
     @property
     def _progress_callback(self) -> Callable[[str], None] | None:
         callback = self.options.get("progress_callback")
@@ -66,7 +72,7 @@ class _DiffusersScriptTrainer(LoraTrainer):
 
     def train(self, request):
         request.output_dir.mkdir(parents=True, exist_ok=True)
-        model_path = self.store.ensure_diffusers_snapshot(self.base_model_id, revision=self.options.get("revision"))
+        model_path = self.prepare_model()
         script = self._ensure_script()
         cmd = [sys.executable, "-m", "accelerate.commands.launch", str(script), *self._base_args(request, model_path)]
         if request.low_vram:

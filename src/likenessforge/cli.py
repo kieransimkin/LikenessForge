@@ -188,7 +188,9 @@ def main(argv=None):
         matches = [r for r in rows if r["name"] == args.name]
         if not matches:
             parser.error(f"unknown model-backed plugin: {args.name}")
-        path = store.ensure_hf_snapshot(matches[0]["model_id"])
+        row = matches[0]
+        options = dict(getattr(cfg, row["kind"]).options)
+        path = create(row["kind"], row["name"], store, **options).prepare_model()
         print(path)
         return 0
 
