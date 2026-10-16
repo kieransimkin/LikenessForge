@@ -5,22 +5,32 @@ import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from fnmatch import fnmatch
 from pathlib import Path
 
-from huggingface_hub import hf_hub_download, snapshot_download
+from huggingface_hub import hf_hub_download, list_repo_files, snapshot_download
 
 LOG = logging.getLogger("likenessforge")
 PROJECT_ROOT_ENV = "LIKENESSFORGE_PROJECT_ROOT"
 
-# Load one standard Diffusers safetensors representation. Repository snapshots
-# may also contain full checkpoints, Flax/ONNX exports and precision variants.
-DIFFUSERS_ALLOW_PATTERNS = [
-    "model_index.json", "README.md", "LICENSE*",
-    "scheduler/*", "tokenizer/*", "tokenizer_2/*", "tokenizer_3/*", "feature_extractor/*",
-    "*/config.json", "*/model.safetensors", "*/model.safetensors.index.json",
-    "*/model-*.safetensors", "*/diffusion_pytorch_model.safetensors",
-    "*/diffusion_pytorch_model.safetensors.index.json", "*/diffusion_pytorch_model-*.safetensors",
-]
+def diffusers_snapshot_files(files: list[str], variant: str | None = None) -> list[str]:
+    """Select one upstream weight format per component, including sharded models."""
+    config_patterns = ["model_index.json", "config.json", "README.md", "LICENSE*", "scheduler/*",
+                       "tokenizer/*", "tokenizer_2/*", "tokenizer_3/*", "feature_extractor/*", "*/config.json"]
+    chosen = {path for path in files if any(fnmatch(path, p) for p in config_patterns)}
+    suffix = f".{variant}" if variant else ""
+    for component in {path.split('/')[0] for path in files if '/' in path}:
+        for extension, stems in (("safetensors", ("model", "diffusion_pytorch_model")),
+                                 ("bin", ("pytorch_model", "diffusion_pytorch_model"))):
+            patterns = [f"{component}/{stem}{suffix}{tail}" for stem in stems
+                        for tail in (f".{extension}", f".{extension}.index.json", f"-*.{extension}")]
+            weights = {path for path in files if any(fnmatch(path, p) for p in patterns)}
+            if weights:
+                chosen.update(weights)
+                break
+    if not any(path.endswith((".safetensors", ".bin")) for path in chosen):
+        raise ValueError(f"No compatible Diffusers weights found for variant {variant!r}")
+    return sorted(chosen)
 
 
 def find_project_root() -> Path:
@@ -89,9 +99,19 @@ class ModelStore:
             return local.resolve()
         return self.ensure_hf_snapshot(str(value))
 
-    def ensure_diffusers_snapshot(self, repo_id: str, revision: str | None = None) -> Path:
-        """Cache the supported safetensors pipeline without unrelated weight formats."""
-        return self.ensure_hf_snapshot(repo_id, revision=revision, allow_patterns=DIFFUSERS_ALLOW_PATTERNS)
+    def ensure_diffusers_snapshot(
+        self, repo_id: str, revision: str | None = None, variant: str | None = None,
+    ) -> Path:
+        """Cache one supported pipeline representation without unrelated exports."""
+        try:
+            files = list_repo_files(repo_id, revision=revision)
+        except Exception as exc:  # noqa: BLE001 - Hub versions expose different transport exceptions.
+            LOG.debug("Remote index unavailable for %s; using local snapshot: %s", repo_id, exc)
+            snapshot = Path(snapshot_download(repo_id, revision=revision, cache_dir=str(self.hf),
+                                              local_files_only=True))
+            files = [p.relative_to(snapshot).as_posix() for p in snapshot.rglob('*') if p.is_file()]
+        selected = diffusers_snapshot_files(files, variant)
+        return self.ensure_hf_snapshot(repo_id, revision=revision, allow_patterns=selected)
 
     def _emit(self, stage: str, repo_id: str, **kwargs) -> None:
         if self.progress_callback:

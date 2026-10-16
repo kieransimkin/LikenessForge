@@ -59,8 +59,10 @@ Model files are downloaded on first use into the repository-local `models/` dire
 Storage illustration for the Stable Diffusion training/inpainting route. This is
 an explanatory diagram, not a screenshot or evidence of a completed training.
 
-Stable Diffusion training and inpainting download only the standard safetensors
-pipeline components, configuration, tokenizers and licence files. Full standalone
+Stable Diffusion training and inpainting select one weight representation per
+pipeline component: safetensors where available, otherwise the upstream binary
+weights. CUDA inpainting selects the FP16 variant by default; CPU and training
+use standard weights. Configuration, tokenizers and licence files are retained. Full standalone
 checkpoints, duplicate precision variants and unrelated export formats are not
 downloaded. Trainers use the exact resolved local snapshot and retain at most one
 resume checkpoint by default. Training logs stay local (`--report_to none`);
