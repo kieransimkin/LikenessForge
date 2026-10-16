@@ -46,7 +46,6 @@ class _DiffusersScriptTrainer(LoraTrainer):
     def _base_args(self, request, model_path: Path | None = None):
         return [
             "--pretrained_model_name_or_path", str(model_path or self.base_model_id),
-            "--cache_dir", str(self.store.hf),
             "--instance_data_dir", str(request.dataset_dir),
             "--output_dir", str(request.output_dir),
             "--instance_prompt", request.instance_prompt,
@@ -62,7 +61,7 @@ class _DiffusersScriptTrainer(LoraTrainer):
             "--checkpointing_steps", str(max(100, request.max_train_steps // 4)),
             "--gradient_checkpointing",
             "--checkpoints_total_limit", "1",
-            "--report_to", "none",
+            "--report_to", "tensorboard",
         ]
 
     def train(self, request):
@@ -77,6 +76,12 @@ class _DiffusersScriptTrainer(LoraTrainer):
 
         env = dict(os.environ)
         env.setdefault("PYTHONUNBUFFERED", "1")
+        env.update({
+            "HF_HOME": str(self.store.root / "hf-home"),
+            "HF_HUB_CACHE": str(self.store.hf),
+            "HF_XET_CACHE": str(self.store.root / "xet"),
+            "TORCH_HOME": str(self.store.root / "torch"),
+        })
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,

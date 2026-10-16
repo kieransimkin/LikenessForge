@@ -19,6 +19,11 @@ def test_gui_launchers_bootstrap_uv_and_use_managed_environment():
     assert "sync --extra all" in powershell
     assert "likenessforge-gui" in powershell
     assert "$env:LIKENESSFORGE_PROJECT_ROOT = $PSScriptRoot" in powershell
+    for name in ("HF_HOME", "HF_HUB_CACHE", "HF_XET_CACHE", "TORCH_HOME", "TORCH_EXTENSIONS_DIR",
+                 "TRITON_CACHE_DIR", "TORCHINDUCTOR_CACHE_DIR"):
+        assert f"export {name}=\"$SCRIPT_DIR/models/" in shell
+        assert f"$env:{name} = Join-Path $PSScriptRoot 'models/" in powershell
+    assert "scripts/prepare_windows_runtime.py --apply" in powershell
 
     assert "start-gui.ps1" in batch
     assert "ExecutionPolicy Bypass" in batch
