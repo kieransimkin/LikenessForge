@@ -20,6 +20,11 @@ def test_gui_exposes_model_and_workflow_controls():
     app = QApplication.instance() or QApplication([])
     window = LikenessForgeWindow()
     try:
+        from likenessforge.config import ForgeConfig
+        defaults = ForgeConfig()
+        for kind in ("detector", "segmenter", "modifier", "trainer"):
+            assert window.models.selected(kind) == getattr(defaults, kind).name
+        assert "is compatible" in window.models.compatibility.text()
         assert not window.windowIcon().isNull()
         assert window.models.segmenter.count() >= 2
         assert window.models.modifier.count() >= 3
@@ -31,6 +36,29 @@ def test_gui_exposes_model_and_workflow_controls():
         assert window.tabs.tabText(3) == "Repair wizard"
         assert window.training_wizard.preset.count() == 3
         assert window.wizard.preset.count() == 3
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_gui_model_setup_delegates_to_selected_plugins(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from likenessforge.gui import app as gui
+
+    app = QApplication.instance() or QApplication([])
+    monkeypatch.setenv("LIKENESSFORGE_PROJECT_ROOT", str(tmp_path))
+    window = LikenessForgeWindow()
+    calls = []
+    try:
+        window.models.selected_model_plugins = lambda: [("modifier", "synthetic", "example/model")]
+        monkeypatch.setattr(gui, "create", lambda kind, name, store: SimpleNamespace(
+            prepare_model=lambda: calls.append((kind, name)),
+        ))
+        worker = SimpleNamespace(model_event=SimpleNamespace(emit=lambda event: None), report=lambda text: None)
+        window._start_worker = lambda task, done, failed, log: task(worker)
+        window.download_selected_models()
+        assert calls == [("modifier", "synthetic")]
     finally:
         window.close()
         app.processEvents()

@@ -13,7 +13,12 @@ def test_diffusers_snapshot_selects_one_pipeline_representation(monkeypatch, tmp
 
     def download(repo_id, **kwargs):
         captured.update(repo_id=repo_id, **kwargs)
-        return tmp_path / "snapshot"
+        snapshot = store.hf / "snapshot"
+        for name in kwargs["allow_patterns"]:
+            path = snapshot / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"synthetic")
+        return snapshot
 
     monkeypatch.setattr(store, "ensure_hf_snapshot", download)
     monkeypatch.setattr(model_store, "list_repo_files", lambda *args, **kwargs: [
@@ -22,7 +27,7 @@ def test_diffusers_snapshot_selects_one_pipeline_representation(monkeypatch, tmp
         "model.ckpt", "v1-5.safetensors", "unet/diffusion_pytorch_model.bin",
         "unet/diffusion_pytorch_model.fp16.safetensors", "onnx/model.onnx",
     ])
-    assert store.ensure_diffusers_snapshot("example/model", revision="immutable") == tmp_path / "snapshot"
+    assert store.ensure_diffusers_snapshot("example/model", revision="immutable") == store.hf / "snapshot"
     assert captured["revision"] == "immutable"
     patterns = captured["allow_patterns"]
     for path in ("model_index.json", "unet/config.json", "unet/diffusion_pytorch_model.safetensors",
@@ -31,6 +36,13 @@ def test_diffusers_snapshot_selects_one_pipeline_representation(monkeypatch, tmp
     for path in ("model.ckpt", "v1-5.safetensors", "unet/diffusion_pytorch_model.bin",
                  "unet/diffusion_pytorch_model.fp16.safetensors", "onnx/model.onnx"):
         assert not any(fnmatch(path, pattern) for pattern in patterns), path
+    assert store.is_diffusers_snapshot_cached("example/model", revision="immutable")
+    assert not store.is_diffusers_snapshot_cached("example/model", revision="immutable", variant="fp16")
+    selected_weight = store.hf / "snapshot/unet/diffusion_pytorch_model.safetensors"
+    selected_weight.write_bytes(b"x")
+    assert not store.is_diffusers_snapshot_cached("example/model", revision="immutable")
+    selected_weight.unlink()
+    assert not store.is_diffusers_snapshot_cached("example/model", revision="immutable")
 
 
 def test_snapshot_selects_safetensors_or_binary_once_per_component():

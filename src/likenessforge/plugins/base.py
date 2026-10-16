@@ -29,6 +29,17 @@ class Plugin(ABC):
         self.store = store
         self.options = options
 
+    def prepare_model(self) -> Path | None:
+        """Acquire this plugin's assets through the same route used at runtime."""
+        if self.info.model_id:
+            return self.store.ensure_hf_snapshot(self.info.model_id, revision=self.options.get("revision"))
+        return None
+
+    def is_model_cached(self) -> bool:
+        return not self.info.model_id or self.store.is_hf_snapshot_cached(
+            self.info.model_id, revision=self.options.get("revision"),
+        )
+
 
 class FaceDetector(Plugin):
     @abstractmethod

@@ -264,10 +264,10 @@ class ModelSetupWidget(QGroupBox):
         _populate_plugin_combo(self.trainer, "trainer")
 
         defaults = ForgeConfig()
-        _set_combo_plugin(self.detector, "mtcnn")
-        _set_combo_plugin(self.segmenter, "sam2-tiny")
+        _set_combo_plugin(self.detector, defaults.detector.name)
+        _set_combo_plugin(self.segmenter, defaults.segmenter.name)
         _set_combo_plugin(self.modifier, defaults.modifier.name)
-        _set_combo_plugin(self.trainer, "sdxl-lora")
+        _set_combo_plugin(self.trainer, defaults.trainer.name)
         self.low_vram.setCurrentText(defaults.low_vram)
 
         form = QFormLayout()
@@ -352,7 +352,8 @@ class ModelSetupWidget(QGroupBox):
                 status = "Built-in / runtime managed"
                 model = "—"
             else:
-                status = "Ready" if self.store.is_hf_snapshot_cached(info.model_id) else "Not downloaded"
+                plugin = create(kind, name, self.store)
+                status = "Ready" if plugin.is_model_cached() else "Not downloaded"
                 model = info.model_id
             self.table.addTopLevelItem(QTreeWidgetItem([kind.title(), name, model, status]))
         self.table.resizeColumnToContents(0)
@@ -1126,7 +1127,7 @@ class LikenessForgeWindow(QMainWindow):
             ready = []
             for kind, name, repo_id in models:
                 worker.report(f"Preparing {kind} {name}: {repo_id}")
-                store.ensure_hf_snapshot(repo_id)
+                create(kind, name, store).prepare_model()
                 ready.append(repo_id)
             return ready
 

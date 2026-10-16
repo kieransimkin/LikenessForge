@@ -64,7 +64,15 @@ pipeline component: safetensors where available, otherwise the upstream binary
 weights. CUDA inpainting selects the FP16 variant by default; CPU and training
 use standard weights. Configuration, tokenizers and licence files are retained. Full standalone
 checkpoints, duplicate precision variants and unrelated export formats are not
-downloaded. Trainers use the exact resolved local snapshot and retain at most one
+downloaded. The CLI model-download command, GUI setup button and runtime use the
+same plugin acquisition policy. The GUI starts with matching SD 1.5 trainer and
+modifier defaults. Its Ready status verifies the selected files and sizes recorded
+under `models/selections/`, rather than requiring every unused upstream export.
+Missing or truncated selected files clear that status; it does not establish model
+loading, output quality or that the upstream repository is unchanged. With automatic
+device selection, either cached precision variant is reported; acquisition checks
+the actual device and fetches its variant if needed. Status refreshes do not import Torch.
+Trainers use the exact resolved local snapshot and retain at most one
 resume checkpoint by default. Training logs stay local (`--report_to tensorboard`);
 deliberate trainer overrides remain available through `--extra-arg`.
 

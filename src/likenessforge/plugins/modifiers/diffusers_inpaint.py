@@ -8,6 +8,31 @@ LOG = logging.getLogger("likenessforge")
 
 
 class _DiffusersInpaint(ImageModifier):
+    def _model_variant(self):
+        if "variant" in self.options:
+            return self.options["variant"]
+        device = self.options.get("device")
+        if device is None:
+            try:
+                import torch
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                device = "cpu"
+        return "fp16" if device == "cuda" else None
+
+    def prepare_model(self):
+        return self.store.ensure_diffusers_snapshot(
+            self.info.model_id, revision=self.options.get("revision"), variant=self._model_variant(),
+        )
+
+    def is_model_cached(self):
+        # A status refresh must stay lightweight and work without Torch installed.
+        # For automatic device selection, actual acquisition checks the device on use.
+        variants = [self._model_variant()] if "variant" in self.options or self.options.get("device") else [None, "fp16"]
+        return any(self.store.is_diffusers_snapshot_cached(
+            self.info.model_id, revision=self.options.get("revision"), variant=variant,
+        ) for variant in variants)
+
     def _load(self):
         cached = getattr(self, "_pipeline_cache", None)
         if cached is not None:
@@ -19,10 +44,8 @@ class _DiffusersInpaint(ImageModifier):
             raise RuntimeError("Diffusion modifiers require `pip install likenessforge[diffusion]`") from exc
         device = self.options.get("device") or ("cuda" if torch.cuda.is_available() else "cpu")
         dtype = torch.float16 if device == "cuda" else torch.float32
-        variant = self.options.get("variant", "fp16" if device == "cuda" else None)
-        model_dir = self.store.ensure_diffusers_snapshot(
-            self.info.model_id, revision=self.options.get("revision"), variant=variant,
-        )
+        variant = self._model_variant()
+        model_dir = self.prepare_model()
         pipe = AutoPipelineForInpainting.from_pretrained(model_dir, torch_dtype=dtype, variant=variant)
         low_vram = self.options.get("low_vram", "auto")
         if device == "cuda" and low_vram in {True, "auto", "cpu_offload"}:

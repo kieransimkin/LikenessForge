@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import time
@@ -111,7 +113,38 @@ class ModelStore:
                                               local_files_only=True))
             files = [p.relative_to(snapshot).as_posix() for p in snapshot.rglob('*') if p.is_file()]
         selected = diffusers_snapshot_files(files, variant)
-        return self.ensure_hf_snapshot(repo_id, revision=revision, allow_patterns=selected)
+        snapshot = self.ensure_hf_snapshot(repo_id, revision=revision, allow_patterns=selected)
+        files = {name: (snapshot / name).stat().st_size for name in selected}
+        receipt = self._selection_receipt(repo_id, revision, variant)
+        receipt.parent.mkdir(parents=True, exist_ok=True)
+        receipt.write_text(json.dumps({
+            "repo_id": repo_id, "revision": revision, "variant": variant,
+            "snapshot": str(snapshot.relative_to(self.hf)), "files": files,
+        }, indent=2), encoding="utf-8")
+        return snapshot
+
+    def _selection_receipt(self, repo_id, revision, variant) -> Path:
+        key = hashlib.sha256(json.dumps([repo_id, revision, variant]).encode()).hexdigest()
+        return self.root / "selections" / f"{key}.json"
+
+    def is_diffusers_snapshot_cached(
+        self, repo_id: str, revision: str | None = None, variant: str | None = None,
+    ) -> bool:
+        """Check the acquired selection, not unused formats in the whole upstream repo."""
+        try:
+            data = json.loads(self._selection_receipt(repo_id, revision, variant).read_text(encoding="utf-8"))
+            snapshot = (self.hf / data["snapshot"]).resolve()
+            snapshot.relative_to(self.hf.resolve())
+            if not isinstance(data["files"], dict) or not data["files"]:
+                return False
+            for name, size in data["files"].items():
+                path = snapshot / name
+                path.resolve().relative_to(self.hf.resolve())
+                if size <= 0 or not path.is_file() or path.stat().st_size != size:
+                    return False
+            return True
+        except (OSError, ValueError, KeyError, TypeError):
+            return False
 
     def _emit(self, stage: str, repo_id: str, **kwargs) -> None:
         if self.progress_callback:
