@@ -1,6 +1,13 @@
 $ErrorActionPreference = "Stop"
 Set-Location -LiteralPath $PSScriptRoot
 $env:LIKENESSFORGE_PROJECT_ROOT = $PSScriptRoot
+$env:HF_HOME = Join-Path $PSScriptRoot 'models/hf-home'
+$env:HF_HUB_CACHE = Join-Path $PSScriptRoot 'models/huggingface'
+$env:HF_XET_CACHE = Join-Path $PSScriptRoot 'models/xet'
+$env:TORCH_HOME = Join-Path $PSScriptRoot 'models/torch'
+$env:TORCH_EXTENSIONS_DIR = Join-Path $PSScriptRoot 'models/torch-extensions'
+$env:TRITON_CACHE_DIR = Join-Path $PSScriptRoot 'models/triton'
+$env:TORCHINDUCTOR_CACHE_DIR = Join-Path $PSScriptRoot 'models/torchinductor'
 
 function Find-Uv {
     $command = Get-Command uv -ErrorAction SilentlyContinue
@@ -42,5 +49,7 @@ Write-Host "LikenessForge: creating/updating the managed environment and GUI/mod
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "LikenessForge: starting GUI..."
+& $uv run --no-sync python scripts/prepare_windows_runtime.py --apply
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $uv run --no-sync likenessforge-gui @args
 exit $LASTEXITCODE

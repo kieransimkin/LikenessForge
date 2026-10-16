@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 from likenessforge.plugins.trainers.diffusers_scripts import SD15LoraTrainer
@@ -8,7 +10,7 @@ def test_trainer_uses_resolved_snapshot_and_local_bounded_logging(monkeypatch, t
     requested = []
     snapshot = tmp_path / "models" / "snapshot"
     store = SimpleNamespace(
-        hf=tmp_path / "models", tools=tmp_path / "tools",
+        root=tmp_path / "models", hf=tmp_path / "models" / "huggingface", tools=tmp_path / "tools",
         ensure_diffusers_snapshot=lambda repo, **kwargs: requested.append((repo, kwargs)) or snapshot,
     )
     trainer = SD15LoraTrainer(store, revision="pinned-sha")
@@ -27,7 +29,12 @@ def test_trainer_uses_resolved_snapshot_and_local_bounded_logging(monkeypatch, t
     cmd = captured["cmd"]
     assert requested == [(trainer.base_model_id, {"revision": "pinned-sha"})]
     assert cmd[cmd.index("--pretrained_model_name_or_path") + 1] == str(snapshot)
-    assert cmd[cmd.index("--report_to") + 1] == "none"
+    assert cmd[cmd.index("--report_to") + 1] == "tensorboard"
     assert cmd[cmd.index("--checkpoints_total_limit") + 1] == "1"
     assert "--push_to_hub" not in cmd
+    assert "--cache_dir" not in cmd
+    assert captured["env"]["HF_HUB_CACHE"] == str(store.hf)
+    assert captured["env"]["HF_HOME"] == str(store.root / "hf-home")
+    contract = json.loads((Path(__file__).parent / "fixtures" / "sd15-trainer-arguments.json").read_text("utf-8"))
+    assert {arg.split("=")[0] for arg in cmd[4:] if arg.startswith("--")} <= set(contract["arguments"])
     assert result == request.output_dir / "pytorch_lora_weights.safetensors"

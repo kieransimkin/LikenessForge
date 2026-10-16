@@ -4,6 +4,13 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$SCRIPT_DIR"
 export LIKENESSFORGE_PROJECT_ROOT="$SCRIPT_DIR"
+export HF_HOME="$SCRIPT_DIR/models/hf-home"
+export HF_HUB_CACHE="$SCRIPT_DIR/models/huggingface"
+export HF_XET_CACHE="$SCRIPT_DIR/models/xet"
+export TORCH_HOME="$SCRIPT_DIR/models/torch"
+export TORCH_EXTENSIONS_DIR="$SCRIPT_DIR/models/torch-extensions"
+export TRITON_CACHE_DIR="$SCRIPT_DIR/models/triton"
+export TORCHINDUCTOR_CACHE_DIR="$SCRIPT_DIR/models/torchinductor"
 
 find_uv() {
     if command -v uv >/dev/null 2>&1; then

@@ -65,7 +65,7 @@ weights. CUDA inpainting selects the FP16 variant by default; CPU and training
 use standard weights. Configuration, tokenizers and licence files are retained. Full standalone
 checkpoints, duplicate precision variants and unrelated export formats are not
 downloaded. Trainers use the exact resolved local snapshot and retain at most one
-resume checkpoint by default. Training logs stay local (`--report_to none`);
+resume checkpoint by default. Training logs stay local (`--report_to tensorboard`);
 deliberate trainer overrides remain available through `--extra-arg`.
 
 Set `LIKENESSFORGE_PROJECT_ROOT` to the owning project before starting an installed
@@ -73,6 +73,18 @@ wheel. Keep `HF_HOME`, `HF_HUB_CACHE`, `HF_XET_CACHE`, `TORCH_HOME` and any comp
 caches beneath that project's `models/` directory too. Keep private prepared
 training data, LoRAs, validation images and traces beneath that same ignored root.
 Existing external caches are not moved or deleted automatically.
+
+The pinned official trainer receives its already-resolved local model path;
+framework cache locations are set through the subprocess environment. This also
+supports trainer versions that do not expose a `--cache_dir` argument.
+
+On Windows with Python 3.12 and a Torch wheel missing `top_level.txt`, Transformers
+can spend substantial time inferring package names by checking every installed
+Torch file. In the intended virtual environment, run
+`python scripts/prepare_windows_runtime.py` to inspect the proposed module-name
+metadata, then add it with `--apply`. The helper derives names from the installed
+wheel's RECORD, preserves every existing package file and refuses writes outside
+that environment. It makes no model download or code patch.
 
 LikenessForge deliberately keeps model assets with the project rather than in a hidden OS cache:
 
