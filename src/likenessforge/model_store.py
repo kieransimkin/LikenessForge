@@ -12,6 +12,16 @@ from huggingface_hub import hf_hub_download, snapshot_download
 LOG = logging.getLogger("likenessforge")
 PROJECT_ROOT_ENV = "LIKENESSFORGE_PROJECT_ROOT"
 
+# Load one standard Diffusers safetensors representation. Repository snapshots
+# may also contain full checkpoints, Flax/ONNX exports and precision variants.
+DIFFUSERS_ALLOW_PATTERNS = [
+    "model_index.json", "README.md", "LICENSE*",
+    "scheduler/*", "tokenizer/*", "tokenizer_2/*", "tokenizer_3/*", "feature_extractor/*",
+    "*/config.json", "*/model.safetensors", "*/model.safetensors.index.json",
+    "*/model-*.safetensors", "*/diffusion_pytorch_model.safetensors",
+    "*/diffusion_pytorch_model.safetensors.index.json", "*/diffusion_pytorch_model-*.safetensors",
+]
+
 
 def find_project_root() -> Path:
     """Locate the LikenessForge project root used for project-local model storage."""
@@ -78,6 +88,10 @@ class ModelStore:
         if local.exists():
             return local.resolve()
         return self.ensure_hf_snapshot(str(value))
+
+    def ensure_diffusers_snapshot(self, repo_id: str, revision: str | None = None) -> Path:
+        """Cache the supported safetensors pipeline without unrelated weight formats."""
+        return self.ensure_hf_snapshot(repo_id, revision=revision, allow_patterns=DIFFUSERS_ALLOW_PATTERNS)
 
     def _emit(self, stage: str, repo_id: str, **kwargs) -> None:
         if self.progress_callback:

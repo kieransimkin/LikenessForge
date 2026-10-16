@@ -54,6 +54,24 @@ Model files are downloaded on first use into the repository-local `models/` dire
 
 ### Model storage and cleanup
 
+![Illustration of selected pipeline components, private project-local models storage and local training](docs/model-storage.svg)
+
+Storage illustration for the Stable Diffusion training/inpainting route. This is
+an explanatory diagram, not a screenshot or evidence of a completed training.
+
+Stable Diffusion training and inpainting download only the standard safetensors
+pipeline components, configuration, tokenizers and licence files. Full standalone
+checkpoints, duplicate precision variants and unrelated export formats are not
+downloaded. Trainers use the exact resolved local snapshot and retain at most one
+resume checkpoint by default. Training logs stay local (`--report_to none`);
+deliberate trainer overrides remain available through `--extra-arg`.
+
+Set `LIKENESSFORGE_PROJECT_ROOT` to the owning project before starting an installed
+wheel. Keep `HF_HOME`, `HF_HUB_CACHE`, `HF_XET_CACHE`, `TORCH_HOME` and any compiler
+caches beneath that project's `models/` directory too. Keep private prepared
+training data, LoRAs, validation images and traces beneath that same ignored root.
+Existing external caches are not moved or deleted automatically.
+
 LikenessForge deliberately keeps model assets with the project rather than in a hidden OS cache:
 
 ```text

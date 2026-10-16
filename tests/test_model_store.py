@@ -1,7 +1,28 @@
+from fnmatch import fnmatch
 from pathlib import Path
 
 from likenessforge import model_store
 from likenessforge.model_store import ModelStore
+
+
+def test_diffusers_snapshot_selects_one_pipeline_representation(monkeypatch, tmp_path):
+    captured = {}
+    store = ModelStore(project_root=tmp_path)
+
+    def download(repo_id, **kwargs):
+        captured.update(repo_id=repo_id, **kwargs)
+        return tmp_path / "snapshot"
+
+    monkeypatch.setattr(store, "ensure_hf_snapshot", download)
+    assert store.ensure_diffusers_snapshot("example/model", revision="immutable") == tmp_path / "snapshot"
+    assert captured["revision"] == "immutable"
+    patterns = captured["allow_patterns"]
+    for path in ("model_index.json", "unet/config.json", "unet/diffusion_pytorch_model.safetensors",
+                 "text_encoder/model-00001-of-00002.safetensors", "tokenizer/vocab.json", "LICENSE"):
+        assert any(fnmatch(path, pattern) for pattern in patterns), path
+    for path in ("model.ckpt", "v1-5.safetensors", "unet/diffusion_pytorch_model.bin",
+                 "unet/diffusion_pytorch_model.fp16.safetensors", "onnx/model.onnx"):
+        assert not any(fnmatch(path, pattern) for pattern in patterns), path
 
 
 def test_model_store_emits_download_progress(monkeypatch, tmp_path: Path):

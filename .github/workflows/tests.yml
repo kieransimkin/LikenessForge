@@ -148,7 +148,7 @@ jobs:
 
           Website: https://kieransimkin.co.uk/danceflow/
 
-          This release adds ecosystem/contributor guidance, truthful requirements, family branding, project metadata and validated immutable distribution packaging. Source: $GITHUB_SHA
+          See the tagged README for supported capabilities and setup. Source: $GITHUB_SHA
 
           Validation: Python 3.10/3.12/3.13 synthetic unit and offscreen Qt tests, Ruff, launcher syntax and built wheel/source metadata/private-file checks. These checks do not establish GPU memory fit or generated likeness quality. Models and trained identity weights are not included. A GitHub release does not establish package-registry publication.
           EOF

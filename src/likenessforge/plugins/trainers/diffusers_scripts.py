@@ -43,9 +43,9 @@ class _DiffusersScriptTrainer(LoraTrainer):
         self._emit(f"Trainer script ready: {dest}")
         return dest
 
-    def _base_args(self, request):
+    def _base_args(self, request, model_path: Path | None = None):
         return [
-            "--pretrained_model_name_or_path", self.base_model_id,
+            "--pretrained_model_name_or_path", str(model_path or self.base_model_id),
             "--cache_dir", str(self.store.hf),
             "--instance_data_dir", str(request.dataset_dir),
             "--output_dir", str(request.output_dir),
@@ -61,13 +61,15 @@ class _DiffusersScriptTrainer(LoraTrainer):
             "--mixed_precision", request.mixed_precision,
             "--checkpointing_steps", str(max(100, request.max_train_steps // 4)),
             "--gradient_checkpointing",
+            "--checkpoints_total_limit", "1",
+            "--report_to", "none",
         ]
 
     def train(self, request):
         request.output_dir.mkdir(parents=True, exist_ok=True)
-        self.store.ensure_hf_snapshot(self.base_model_id)
+        model_path = self.store.ensure_diffusers_snapshot(self.base_model_id, revision=self.options.get("revision"))
         script = self._ensure_script()
-        cmd = [sys.executable, "-m", "accelerate.commands.launch", str(script), *self._base_args(request)]
+        cmd = [sys.executable, "-m", "accelerate.commands.launch", str(script), *self._base_args(request, model_path)]
         if request.low_vram:
             cmd.extend(self.low_vram_args())
         cmd.extend(request.extra_args)

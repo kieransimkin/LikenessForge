@@ -17,7 +17,7 @@ class _DiffusersInpaint(ImageModifier):
             from diffusers import AutoPipelineForInpainting
         except ImportError as exc:
             raise RuntimeError("Diffusion modifiers require `pip install likenessforge[diffusion]`") from exc
-        model_dir = self.store.ensure_hf_snapshot(self.info.model_id)
+        model_dir = self.store.ensure_diffusers_snapshot(self.info.model_id, revision=self.options.get("revision"))
         device = self.options.get("device") or ("cuda" if torch.cuda.is_available() else "cpu")
         dtype = torch.float16 if device == "cuda" else torch.float32
         pipe = AutoPipelineForInpainting.from_pretrained(model_dir, torch_dtype=dtype)
