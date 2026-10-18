@@ -12,6 +12,16 @@ LikenessForge is a local-first, modular CLI **and desktop GUI** for taking an ex
 
 The [family logo](docs/branding/README.md) also identifies the desktop window.
 
+## Before every new workflow
+
+Check the latest stable official release and the actual installed/imported version before starting; do not infer currency from a directory name or a development checkout. Read the current release notes, tagged capability documentation and relevant Potential problems. Use the [DanceFlow release preflight](https://github.com/kieransimkin/DanceFlow/blob/main/docs/workflows/release-preflight.md) and [complete capability references](https://github.com/kieransimkin/DanceFlow/blob/main/docs/capabilities/index.md).
+
+People and agents should consider the full ecosystem, use all capabilities that materially serve the task, compose supported files/APIs, and improve a demonstrated reusable gap in its canonical tool. Record why no worthwhile change is justified when that is the result. Keep independent tool identities, compatibility, source clocks, privacy, model/download costs and publication/deployment permissions intact. Store weights and model-specific caches in the owning project's ignored `models/`.
+
+## Find your route
+
+[Requirements and scope](#requirements-and-scope) · [What it does](#what-it-does) · [Built-in plugins](#built-in-plugins) · [Start the desktop GUI (recommended)](#start-the-desktop-gui-recommended) · [Inspect plugins and models](#inspect-plugins-and-models) · [Identify the face index](#identify-the-face-index) · [Repair a face](#repair-a-face) · [Repair wizard](#repair-wizard) · [Train a LoRA](#train-a-lora)
+
 ## Requirements and scope
 
 Python 3.10 or later is required for manual installation; the desktop launchers bootstrap the pinned Python automatically. Qt is optional for CLI use. Model-backed operations need the selected extras, model downloads and suitable memory, GPU/runtime or CPU-offload support. The code is MIT-licensed; downloaded models retain separate terms. Install from this repository or a verified GitHub release; this README does not imply availability on a package registry.
