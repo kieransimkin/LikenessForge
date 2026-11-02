@@ -450,3 +450,25 @@ The supplied workflows process images locally; first-use model/helper downloads 
 People and agents are welcome to inspect the available capabilities and suggest useful improvements. Reuse the plugin/workflow interfaces, reproduce a concrete gap, update README.md, add meaningful synthetic tests and a runnable example, then submit a [pull request to LikenessForge](https://github.com/kieransimkin/LikenessForge/pulls). Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) first. Explain why no worthwhile change is needed when the existing tool already meets the task.
 
 Tagged releases run the test/build workflow before publishing immutable wheel/source distributions and SHA-256 checksums to GitHub. Package-registry publication is separate and is not claimed by a GitHub release. No model weights, trained identity LoRAs or private examples are distributed.
+
+
+## Reliable Python tests on Windows
+
+Run focused tests through `pwsh ./scripts/Invoke-Tests.ps1 <test-path> [...]`.
+The wrapper probes create/read/atomic-rename/delete access before collection,
+uses a unique per-run root beneath `%LOCALAPPDATA%/<project>/pytest-tmp` on
+Windows, redirects Python process temporary files, pytest's `--basetemp` and cache,
+then removes only that run's directory and restores the caller's environment.
+This avoids stale or sandbox-altered `%TEMP%\pytest-of-*` ACLs and prevents
+parallel checkouts from sharing a pytest root.
+
+Repository text is stored and checked out as LF through `.gitattributes`;
+declared binary media, archives, fonts and model formats remain byte-exact.
+
+An omitted test selection fails closed. Use `-FullSuite` only for an explicit
+release or whole-environment diagnostic; routine local work should select the
+affected tests, while GitHub Actions owns the complete platform matrix.
+
+This is a command-line environment-isolation contract, so screenshots or video
+would not add reliable evidence. The probe messages, selected test output and
+process exit code are the verification evidence.
