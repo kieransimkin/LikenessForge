@@ -24,7 +24,7 @@ People and agents should consider the full ecosystem, use all capabilities that 
 
 ## Requirements and scope
 
-Python 3.10 or later is required for manual installation; the desktop launchers bootstrap the pinned Python automatically. Qt is optional for CLI use. Model-backed operations need the selected extras, model downloads and suitable memory, GPU/runtime or CPU-offload support. The code is MIT-licensed; downloaded models retain separate terms. Install from this repository or a verified GitHub release; this README does not imply availability on a package registry.
+Python 3.10 or later is required for manual installation; the desktop launchers bootstrap the pinned Python automatically. Qt is optional for CLI use. Model-backed operations need the selected extras, model downloads and suitable memory, GPU/runtime or CPU-offload support. The code is MIT-licensed; downloaded models retain separate terms. Install from a [tested GitHub release](https://github.com/kieransimkin/LikenessForge/releases) or a reviewed source checkout.
 
 LikenessForge prepares still-image candidates. RasterMoves handles general upscaling, PixelCue handles media tagging, and DanceMoves handles web motion. Files may be passed between these tools through explicit reviewed handoffs; no automatic integration or identity-verification service is implied. See the [DanceFlow workflow](docs/DANCEFLOW.md).
 
